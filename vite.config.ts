@@ -16,7 +16,9 @@ export default defineConfig({
         name: "TR Genius PWA",
         short_name: "TR Genius",
         description: "Assistente de IA para criar Estudos Técnicos Preliminares e Termos de Referência, alinhado à Lei de Licitações 14.133/21.",
-        start_url: ".",
+        lang: 'pt-BR',
+        start_url: "/",
+        scope: '/',
         display: "standalone",
         display_override: ["window-controls-overlay", "standalone"],
         background_color: "#f8fafc",
@@ -24,6 +26,7 @@ export default defineConfig({
         orientation: "portrait-primary",
         categories: ["business", "productivity", "government"],
         icons: [
+          { "src": pwaIcon, "sizes": "48x48", "type": "image/svg+xml" },
           { "src": pwaIcon, "sizes": "72x72", "type": "image/svg+xml" },
           { "src": pwaIcon, "sizes": "96x96", "type": "image/svg+xml" },
           { "src": pwaIcon, "sizes": "128x128", "type": "image/svg+xml" },
@@ -39,29 +42,29 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/cdn\.tailwindcss\.com\/.*/i,
+            urlPattern: ({url}) => url.origin === 'https://cdn.tailwindcss.com',
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'tailwind-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 } }
           },
           {
-            urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
+            urlPattern: ({url}) => url.origin === 'https://cdnjs.cloudflare.com',
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'cdnjs-cache', expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 } }
           },
           {
-            urlPattern: /^https:\/\/unpkg\.com\/.*/i,
+            urlPattern: ({url}) => url.origin === 'https://unpkg.com',
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'unpkg-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 } }
           },
           {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            urlPattern: ({url}) => url.origin === 'https://fonts.googleapis.com',
             handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'google-fonts-cache', expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 365 } }
+            options: { cacheName: 'google-fonts-stylesheets-cache', expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 365 } }
           },
           {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'google-fonts-static-cache', expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 365 } }
+            urlPattern: ({url}) => url.origin === 'https://fonts.gstatic.com',
+            handler: 'CacheFirst',
+            options: { cacheName: 'google-fonts-webfonts-cache', expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 365 } }
           }
         ],
       },

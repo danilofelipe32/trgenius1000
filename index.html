@@ -113,6 +113,28 @@
       .animate-scale-in {
         animation: scale-in 0.2s ease-out forwards;
       }
+      /* Splash screen styles */
+      .app-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background-color: #f8fafc; /* slate-50 */
+        color: #ec4899; /* pink-500 */
+      }
+      .app-loader .spinner {
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border-left-color: #ec4899; /* pink-500 */
+        animation: spin 1s ease infinite;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
     </style>
 <script type="importmap">
 {
@@ -130,7 +152,12 @@
 </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-loader">
+        <div class="spinner"></div>
+        <p style="margin-top: 1rem; font-weight: 500;">A carregar TR Genius...</p>
+      </div>
+    </div>
     <script type="module" src="/index.tsx"></script>
     <!-- The service worker registration script is now injected automatically by vite-plugin-pwa -->
   </body>
