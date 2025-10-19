@@ -1989,7 +1989,7 @@ Solicitação do usuário: "${refinePrompt}"
                       {displayedETPs.length > 0 ? (
                         <ul className="space-y-2">
                           {displayedETPs.map(etp => (
-                             <li key={etp.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                             <li key={etp.id} className="relative flex items-center justify-between bg-slate-50 p-2 rounded-lg">
                                 {editingDoc?.type === 'etp' && editingDoc?.id === etp.id ? (
                                     <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                         <div className="flex-grow">
@@ -2035,11 +2035,11 @@ Solicitação do usuário: "${refinePrompt}"
                                           )}
                                       </div>
                                       {/* Actions */}
-                                      <div className="relative flex-shrink-0">
+                                      <div className="flex-shrink-0">
                                         <button 
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setOpenDocMenu(openDocMenu?.id === etp.id ? null : { type: 'etp', id: etp.id });
+                                                setOpenDocMenu(openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? null : { type: 'etp', id: etp.id });
                                             }} 
                                             className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
                                             title="Mais opções"
@@ -2086,7 +2086,7 @@ Solicitação do usuário: "${refinePrompt}"
                       {displayedTRs.length > 0 ? (
                         <ul className="space-y-2">
                           {displayedTRs.map(tr => (
-                             <li key={tr.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                             <li key={tr.id} className="relative flex items-center justify-between bg-slate-50 p-2 rounded-lg">
                                 {editingDoc?.type === 'tr' && editingDoc?.id === tr.id ? (
                                     <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                         <div className="flex-grow">
@@ -2132,11 +2132,11 @@ Solicitação do usuário: "${refinePrompt}"
                                           )}
                                       </div>
                                       {/* Actions */}
-                                      <div className="relative flex-shrink-0">
+                                      <div className="flex-shrink-0">
                                         <button 
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setOpenDocMenu(openDocMenu?.id === tr.id ? null : { type: 'tr', id: tr.id });
+                                                setOpenDocMenu(openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? null : { type: 'tr', id: tr.id });
                                             }} 
                                             className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
                                             title="Mais opções"
