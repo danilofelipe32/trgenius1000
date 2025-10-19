@@ -3,7 +3,36 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 // FIX: Initialize with API key from environment variables per guidelines, removing hardcoded key.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// --- Optimization variables ---
+let lastApiCallTimestamp = 0;
+const RATE_LIMIT_MS = 3000; // 3 second delay between calls
+const CACHE_PREFIX = 'gemini-cache-';
+// -----------------------------
+
 export async function callGemini(prompt: string, useWebSearch: boolean = false): Promise<string> {
+  // --- Rate Limiting Logic ---
+  const now = Date.now();
+  if (now - lastApiCallTimestamp < RATE_LIMIT_MS) {
+    console.log("Rate limit triggered.");
+    return "Erro: Múltiplas solicitações detectadas. Por favor, aguarde alguns segundos antes de tentar novamente.";
+  }
+  // ---------------------------
+
+  // --- Caching Logic (Read) ---
+  const cacheKey = `${CACHE_PREFIX}${useWebSearch}-${prompt}`;
+  try {
+    const cachedResponse = sessionStorage.getItem(cacheKey);
+    if (cachedResponse) {
+      console.log("Servindo resposta do cache.");
+      return cachedResponse;
+    }
+  } catch (e) {
+    console.warn("Não foi possível aceder ao sessionStorage para cache.", e);
+  }
+  // ----------------------------
+
+  lastApiCallTimestamp = now; // Update timestamp only when making a real call
+
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -51,6 +80,16 @@ export async function callGemini(prompt: string, useWebSearch: boolean = false):
     }
 
     if (text) {
+      // --- Caching Logic (Write) ---
+      if (!text.startsWith("Erro:")) {
+        try {
+          sessionStorage.setItem(cacheKey, text);
+          console.log("Resposta guardada em cache.");
+        } catch (e) {
+          console.warn("Não foi possível guardar a resposta no sessionStorage.", e);
+        }
+      }
+      // -----------------------------
       return text;
     }
     
