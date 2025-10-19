@@ -480,6 +480,7 @@ const App: React.FC = () => {
   const [installPrompt, setInstallPrompt] = useState<any>(null); // For PWA install prompt
   const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [openDocMenu, setOpenDocMenu] = useState<{ type: DocumentType; id: number } | null>(null);
   
   // Refine Modal State
   const [isRefineModalOpen, setIsRefineModalOpen] = useState(false);
@@ -570,6 +571,22 @@ const App: React.FC = () => {
         setIsAuthenticated(true);
     }
   }, []);
+
+  // Effect to close dropdown menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setOpenDocMenu(null);
+    };
+
+    if (openDocMenu) {
+      document.addEventListener('click', handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, [openDocMenu]);
+
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -2018,13 +2035,33 @@ Solicitação do usuário: "${refinePrompt}"
                                           )}
                                       </div>
                                       {/* Actions */}
-                                      <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button onClick={() => handleStartEditing('etp', etp)} className="w-6 h-6 text-slate-500 hover:text-yellow-600" title="Renomear"><Icon name="pencil-alt" /></button>
-                                        <button onClick={() => handleLoadDocument('etp', etp.id)} className="w-6 h-6 text-slate-500 hover:text-blue-600" title="Carregar"><Icon name="upload" /></button>
-                                        <button onClick={() => { setPreviewContext({ type: 'etp', id: etp.id }); setIsPreviewModalOpen(true); }} className="w-6 h-6 text-slate-500 hover:text-green-600" title="Pré-visualizar"><Icon name="eye" /></button>
-                                        <button onClick={() => displayDocumentHistory(etp)} className="w-6 h-6 text-slate-500 hover:text-purple-600" title="Ver Histórico"><Icon name="history" /></button>
-                                        <button onClick={() => handleDeleteDocument('etp', etp.id)} className="w-6 h-6 text-slate-500 hover:text-red-600" title="Apagar"><Icon name="trash" /></button>
-                                      </div>
+                                      <div className="relative flex-shrink-0">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setOpenDocMenu(openDocMenu?.id === etp.id ? null : { type: 'etp', id: etp.id });
+                                            }} 
+                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
+                                            title="Mais opções"
+                                        >
+                                            <Icon name="ellipsis-v" />
+                                        </button>
+                                        {openDocMenu?.type === 'etp' && openDocMenu?.id === etp.id && (
+                                            <div 
+                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-20 py-1"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <ul className="text-sm text-slate-700">
+                                                    <li><button onClick={() => { handleStartEditing('etp', etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
+                                                    <li><button onClick={() => { handleLoadDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
+                                                    <li><button onClick={() => { setPreviewContext({ type: 'etp', id: etp.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
+                                                    <li><button onClick={() => { displayDocumentHistory(etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
+                                                    <li className="my-1"><hr className="border-slate-100"/></li>
+                                                    <li><button onClick={() => { handleDeleteDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
                                   </div>
                                 )}
                               </li>
@@ -2095,13 +2132,33 @@ Solicitação do usuário: "${refinePrompt}"
                                           )}
                                       </div>
                                       {/* Actions */}
-                                      <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button onClick={() => handleStartEditing('tr', tr)} className="w-6 h-6 text-slate-500 hover:text-yellow-600" title="Renomear"><Icon name="pencil-alt" /></button>
-                                        <button onClick={() => handleLoadDocument('tr', tr.id)} className="w-6 h-6 text-slate-500 hover:text-blue-600" title="Carregar"><Icon name="upload" /></button>
-                                        <button onClick={() => { setPreviewContext({ type: 'tr', id: tr.id }); setIsPreviewModalOpen(true); }} className="w-6 h-6 text-slate-500 hover:text-green-600" title="Pré-visualizar"><Icon name="eye" /></button>
-                                        <button onClick={() => displayDocumentHistory(tr)} className="w-6 h-6 text-slate-500 hover:text-purple-600" title="Ver Histórico"><Icon name="history" /></button>
-                                        <button onClick={() => handleDeleteDocument('tr', tr.id)} className="w-6 h-6 text-slate-500 hover:text-red-600" title="Apagar"><Icon name="trash" /></button>
-                                      </div>
+                                      <div className="relative flex-shrink-0">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setOpenDocMenu(openDocMenu?.id === tr.id ? null : { type: 'tr', id: tr.id });
+                                            }} 
+                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
+                                            title="Mais opções"
+                                        >
+                                            <Icon name="ellipsis-v" />
+                                        </button>
+                                        {openDocMenu?.type === 'tr' && openDocMenu?.id === tr.id && (
+                                            <div 
+                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-20 py-1"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <ul className="text-sm text-slate-700">
+                                                    <li><button onClick={() => { handleStartEditing('tr', tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
+                                                    <li><button onClick={() => { handleLoadDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
+                                                    <li><button onClick={() => { setPreviewContext({ type: 'tr', id: tr.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
+                                                    <li><button onClick={() => { displayDocumentHistory(tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
+                                                    <li className="my-1"><hr className="border-slate-100"/></li>
+                                                    <li><button onClick={() => { handleDeleteDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
                                   </div>
                                 )}
                               </li>
