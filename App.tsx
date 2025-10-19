@@ -544,7 +544,7 @@ const App: React.FC = () => {
     { key: 'all', label: 'Todos', activeClasses: 'bg-white shadow-sm text-slate-800', inactiveClasses: 'text-slate-500 hover:bg-slate-200' },
     { key: 'high', label: 'Alta', activeClasses: 'bg-red-500 text-white shadow-sm', inactiveClasses: 'text-red-700 hover:bg-red-100' },
     { key: 'medium', label: 'Média', activeClasses: 'bg-yellow-500 text-white shadow-sm', inactiveClasses: 'text-yellow-700 hover:bg-yellow-100' },
-    { key: 'low', label: 'Baixa', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
+    { key: 'low', label: 'Alta', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
   ];
 
 
@@ -745,35 +745,87 @@ const App: React.FC = () => {
     const selectedFiles = uploadedFiles.filter(f => f.selected);
     if (selectedFiles.length === 0) return '';
 
-    addNotification('info', `A resumir ${selectedFiles.length} ficheiro(s) para contexto...`, 'Este processo pode demorar alguns segundos.');
-
-    const summaryPromises = selectedFiles.map(file => {
-      const fileContent = file.chunks.join('\n\n');
-      if (!fileContent.trim()) {
-        return Promise.resolve('');
-      }
-      const summaryPrompt = `Você é um assistente de IA especialista em resumir documentos. Resuma o texto a seguir, focando APENAS nas informações mais relevantes para o tópico: "${query}". O resumo deve ser conciso, direto e em formato de tópicos (bullet points) se possível. Retorne apenas o resumo. TEXTO: \n\n${fileContent}`;
-      return callGemini(summaryPrompt, false);
-    });
-
-    const summaries = await Promise.all(summaryPromises);
+    addNotification('info', `A processar ${selectedFiles.length} ficheiro(s) para contexto...`, 'A IA está a selecionar as partes mais relevantes.');
     
-    const context = selectedFiles
-      .map((file, index) => {
-        const summary = summaries[index];
-        if (summary && !summary.startsWith("Erro:")) {
-          return `Contexto resumido do ficheiro "${file.name}":\n${summary}`;
-        }
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n\n---\n\n');
+    const allChunks = selectedFiles.flatMap(file => 
+        file.chunks.map(chunk => ({
+            content: chunk,
+            source: file.name
+        }))
+    );
 
-    if (!context.trim()) {
+    if (allChunks.length === 0) {
+      addNotification('info', 'Contexto Vazio', 'Os ficheiros selecionados não contêm texto para análise.');
       return '';
     }
-      
-    return `\n\nAdicionalmente, utilize o conteúdo resumido dos seguintes documentos de apoio (RAG) como base de conhecimento:\n\n--- INÍCIO DOS RESUMOS DE APOIO ---\n${context}\n--- FIM DOS RESUMOS DE APOIO ---`;
+
+    let relevantContent = '';
+
+    // If there are few chunks, use them all directly to save an API call.
+    if (allChunks.length <= 5) {
+        relevantContent = allChunks
+            .map(chunk => `Contexto do ficheiro "${chunk.source}":\n${chunk.content}`)
+            .join('\n\n---\n\n');
+    } else {
+        // Use Gemini to select the most relevant chunks, truncating them to avoid overly large prompts.
+        const selectionPrompt = `
+        Analise a PERGUNTA do utilizador e a lista de TRECHOS de documentos fornecida abaixo.
+        Sua tarefa é identificar e retornar APENAS os números dos trechos (ex: "1, 5, 8") que são mais cruciais e diretamente relevantes para responder à pergunta. Selecione no máximo os 5 trechos mais importantes.
+
+        PERGUNTA: "${query}"
+
+        --- INÍCIO DOS TRECHOS ---
+        ${allChunks.map((chunk, index) => `[TRECHO ${index + 1} - Ficheiro: ${chunk.source}]:\n${chunk.content.substring(0, 1500)}...`).join('\n\n')}
+        --- FIM DOS TRECHOS ---
+
+        Números dos trechos mais relevantes (separados por vírgula):`;
+
+        try {
+            const selectionResult = await callGemini(selectionPrompt, false);
+
+            if (selectionResult && !selectionResult.startsWith("Erro:")) {
+                const selectedIndices = selectionResult
+                    .split(',')
+                    .map(n => parseInt(n.trim(), 10) - 1)
+                    .filter(n => !isNaN(n) && n >= 0 && n < allChunks.length);
+                
+                if (selectedIndices.length > 0) {
+                    relevantContent = selectedIndices
+                        .map(index => {
+                            const chunk = allChunks[index];
+                            return `Contexto do ficheiro "${chunk.source}":\n${chunk.content}`;
+                        })
+                        .join('\n\n---\n\n');
+                    addNotification('success', 'Contexto Otimizado', `${selectedIndices.length} trechos relevantes foram selecionados para a IA.`);
+                } else {
+                    // Fallback if Gemini doesn't return valid numbers
+                    relevantContent = allChunks.slice(0, 3)
+                        .map(chunk => `Contexto do ficheiro "${chunk.source}":\n${chunk.content}`)
+                        .join('\n\n---\n\n');
+                    addNotification('info', 'Contexto Padrão', 'Não foi possível selecionar trechos específicos. Usando um contexto geral.');
+                }
+            } else {
+                 // Fallback on Gemini error
+                 relevantContent = allChunks.slice(0, 3)
+                    .map(chunk => `Contexto do ficheiro "${chunk.source}":\n${chunk.content}`)
+                    .join('\n\n---\n\n');
+                addNotification('error', 'Erro no RAG', 'Falha ao selecionar contexto. Usando um contexto geral.');
+            }
+        // FIX: Use unknown in catch and safely access error message.
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            relevantContent = allChunks.slice(0, 3)
+                .map(chunk => `Contexto do ficheiro "${chunk.source}":\n${chunk.content}`)
+                .join('\n\n---\n\n');
+            addNotification('error', 'Erro no RAG', `Ocorreu um erro inesperado: ${message}`);
+        }
+    }
+
+    if (!relevantContent.trim()) {
+        return '';
+    }
+        
+    return `\n\nAdicionalmente, utilize o conteúdo dos seguintes documentos de apoio (RAG) como base de conhecimento:\n\n--- INÍCIO DOS DOCUMENTOS DE APOIO ---\n${relevantContent}\n--- FIM DOS DOCUMENTOS DE APOIO ---`;
   }, [uploadedFiles, addNotification]);
 
   const webSearchInstruction = "\n\nAdicionalmente, para uma resposta mais completa e atualizada, realize uma pesquisa na web por informações relevantes, incluindo notícias, atualizações na Lei 14.133/21 e jurisprudências recentes sobre o tema.";
