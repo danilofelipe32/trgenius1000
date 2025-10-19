@@ -544,7 +544,7 @@ const App: React.FC = () => {
     { key: 'all', label: 'Todos', activeClasses: 'bg-white shadow-sm text-slate-800', inactiveClasses: 'text-slate-500 hover:bg-slate-200' },
     { key: 'high', label: 'Alta', activeClasses: 'bg-red-500 text-white shadow-sm', inactiveClasses: 'text-red-700 hover:bg-red-100' },
     { key: 'medium', label: 'Média', activeClasses: 'bg-yellow-500 text-white shadow-sm', inactiveClasses: 'text-yellow-700 hover:bg-yellow-100' },
-    { key: 'low', label: 'Alta', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
+    { key: 'low', label: 'Baixa', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
   ];
 
 
@@ -870,6 +870,7 @@ Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extr
               addNotification('error', 'Erro de Geração', generatedText);
           }
       } catch (error: unknown) {
+          // FIX: Use unknown in catch and safely access error message.
           const message = error instanceof Error ? error.message : String(error);
           addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${message}`);
       } finally {
@@ -960,6 +961,7 @@ ${content}
         const result = await callGemini(finalPrompt, useWebSearch);
         setComplianceCheckResult(result);
     } catch (error: unknown) {
+        // FIX: Use unknown in catch and safely access error message.
         const message = error instanceof Error ? error.message : String(error);
         setComplianceCheckResult(`<p>Erro ao verificar a conformidade: ${message}</p>`);
     } finally {
@@ -1328,6 +1330,7 @@ Seja técnico, objetivo e use a estrutura HTML fornecida para garantir uma apres
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
         setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
     } catch (error: unknown) {
+        // FIX: Use unknown in catch and safely access error message.
         const message = error instanceof Error ? error.message : String(error);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: `<p>Erro ao realizar análise: ${message}</p>` });
     } finally {
@@ -1364,8 +1367,9 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML origi
         setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement })); // Restore original on error
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      addNotification('error', 'Erro Inesperado', `Falha ao refinar a análise: ${message}`);
+        // FIX: Use unknown in catch and safely access error message.
+        const message = error instanceof Error ? error.message : String(error);
+        addNotification('error', 'Erro Inesperado', `Falha ao refinar a análise: ${message}`);
       setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement }));
     } finally {
       setIsAnalysisLoading(false);
@@ -1411,8 +1415,9 @@ Solicitação do usuário: "${refinePrompt}"
         addNotification("error", "Erro de Refinamento", refinedHtml);
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      addNotification('error', 'Erro Inesperado', `Falha ao refinar o texto: ${message}`);
+        // FIX: Use unknown in catch and safely access error message.
+        const message = error instanceof Error ? error.message : String(error);
+        addNotification('error', 'Erro Inesperado', `Falha ao refinar o texto: ${message}`);
     } finally {
       setIsRefining(false);
     }
@@ -1515,6 +1520,7 @@ Solicitação do usuário: "${refinePrompt}"
           setSummaryState({ loading: false, content: `<p>Erro ao gerar resumo: ${summary}</p>` });
         }
       } catch (error: unknown) {
+        // FIX: Use unknown in catch and safely access error message.
         const message = error instanceof Error ? error.message : String(error);
         setSummaryState({ loading: false, content: `<p>Falha inesperada ao gerar resumo: ${message}</p>` });
       }
