@@ -474,6 +474,12 @@ const App: React.FC = () => {
   const [refinePrompt, setRefinePrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
 
+  // Detailed Prompt Modal State
+  const [isDetailedPromptModalOpen, setIsDetailedPromptModalOpen] = useState(false);
+  const [detailedPromptContext, setDetailedPromptContext] = useState<{ docType: DocumentType; sectionId: string; title: string; } | null>(null);
+  const [userDetailedPrompt, setUserDetailedPrompt] = useState('');
+
+
   // Compliance Checker State
   const [isComplianceModalOpen, setIsComplianceModalOpen] = useState(false);
   const [complianceCheckResult, setComplianceCheckResult] = useState<string>('');
@@ -519,7 +525,7 @@ const App: React.FC = () => {
     { key: 'all', label: 'Todos', activeClasses: 'bg-white shadow-sm text-slate-800', inactiveClasses: 'text-slate-500 hover:bg-slate-200' },
     { key: 'high', label: 'Alta', activeClasses: 'bg-red-500 text-white shadow-sm', inactiveClasses: 'text-red-700 hover:bg-red-100' },
     { key: 'medium', label: 'Média', activeClasses: 'bg-yellow-500 text-white shadow-sm', inactiveClasses: 'text-yellow-700 hover:bg-yellow-100' },
-    { key: 'low', label: 'Baixa', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
+    { key: 'low', label: 'Alta', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
   ];
 
 
@@ -753,69 +759,116 @@ const App: React.FC = () => {
 
   const webSearchInstruction = "\n\nAdicionalmente, para uma resposta mais completa e atualizada, realize uma pesquisa na web por informações relevantes, incluindo notícias, atualizações na Lei 14.133/21 e jurisprudências recentes sobre o tema.";
 
-  const handleGenerate = async (docType: DocumentType, sectionId: string, title: string) => {
-    const currentSections = docType === 'etp' ? etpSectionsContent : trSectionsContent;
-    const allSections = docType === 'etp' ? etpSections : trSections;
-    setLoadingSection(sectionId);
+  const handleGenerate = async (docType: DocumentType, sectionId: string, title: string, userPrompt: string = '') => {
+      const currentSections = docType === 'etp' ? etpSectionsContent : trSectionsContent;
+      const allSections = docType === 'etp' ? etpSections : trSections;
+      setLoadingSection(sectionId);
 
-    let context = '';
-    let prompt = '';
-    
-    if(docType === 'etp') {
-      const demandaText = currentSections['etp-2-necessidade'] || '';
-      if(sectionId !== 'etp-2-necessidade' && !demandaText.trim()) {
-        addNotification('info', 'Atenção', "Por favor, preencha a seção '2. Descrição da Necessidade' primeiro, pois ela serve de base para as outras.");
-        setValidationErrors(new Set(['etp-2-necessidade']));
-        setLoadingSection(null);
-        return;
-      }
-      context = `Contexto Principal (Necessidade da Contratação): ${demandaText}\n`;
-      allSections.forEach(sec => {
-        const content = currentSections[sec.id];
-        if (sec.id !== sectionId && typeof content === 'string' && content.trim()) {
-          context += `\nContexto Adicional (${sec.title}): ${content.trim()}\n`;
-        }
-      });
-      const ragContext = await getRagContext(title);
-      prompt = `Você é um especialista em planeamento de contratações públicas no Brasil. Sua tarefa é gerar o conteúdo para a seção "${title}" de um Estudo Técnico Preliminar (ETP).\n\nUse o seguinte contexto do formulário como base:\n${context}\n${ragContext}\n\nGere um texto detalhado e tecnicamente correto para a seção "${title}", utilizando a Lei 14.133/21 como referência principal e incorporando as informações do formulário e dos documentos de apoio.`;
-    } else { // TR
-      if (!loadedEtpForTr) {
-        addNotification('info', 'Atenção', 'Por favor, carregue um ETP para usar como contexto antes de gerar o TR.');
-        setLoadingSection(null);
-        return;
-      }
-      const objetoText = currentSections['tr-1-objeto'] || '';
-      if(sectionId !== 'tr-1-objeto' && !objetoText.trim()) {
-        addNotification('info', 'Atenção', "Por favor, preencha a seção '1. Objeto' primeiro, pois ela serve de base para as outras.");
-        setValidationErrors(new Set(['tr-1-objeto']));
-        setLoadingSection(null);
-        return;
-      }
-      context = `--- INÍCIO DO ETP ---\n${loadedEtpForTr.content}\n--- FIM DO ETP ---`;
-      allSections.forEach(sec => {
-        const content = currentSections[sec.id];
-        if (sec.id !== sectionId && typeof content === 'string' && content.trim()) {
-          context += `\nContexto Adicional do TR já preenchido (${sec.title}): ${content.trim()}\n`;
-        }
-      });
-      const ragContext = await getRagContext(title);
-      prompt = `Você é um especialista em licitações públicas no Brasil. Sua tarefa é gerar o conteúdo para a seção "${title}" de um Termo de Referência (TR).\n\nPara isso, utilize as seguintes fontes de informação, em ordem de prioridade:\n1. O Estudo Técnico Preliminar (ETP) base.\n2. Os documentos de apoio (RAG) fornecidos.\n3. O conteúdo já preenchido em outras seções do TR.\n\n${context}\n${ragContext}\n\nGere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extraindo e inferindo as informações necessárias das fontes fornecidas.`;
-    }
-    
-    const finalPrompt = prompt + (useWebSearch ? webSearchInstruction : '');
+      let primaryContext = '';
+      let secondaryContext = '';
+      let prompt = '';
 
-    try {
-      const generatedText = await callGemini(finalPrompt, useWebSearch);
-      if (generatedText && !generatedText.startsWith("Erro:")) {
-        setGeneratedContentModal({ docType, sectionId, title, content: generatedText });
-      } else {
-        addNotification('error', 'Erro de Geração', generatedText);
+      if (docType === 'etp') {
+          const primarySectionId = 'etp-2-necessidade';
+          const necessidadeText = currentSections[primarySectionId] || '';
+
+          if (sectionId !== primarySectionId && !necessidadeText.trim()) {
+              addNotification('info', 'Atenção', `Por favor, preencha a seção "${etpSections.find(s => s.id === primarySectionId)?.title}" primeiro, pois ela serve de base para as outras.`);
+              setValidationErrors(new Set([primarySectionId]));
+              setLoadingSection(null);
+              return;
+          }
+
+          primaryContext = `Contexto Principal (Necessidade da Contratação): ${necessidadeText}\n`;
+          allSections.forEach(sec => {
+              const content = currentSections[sec.id];
+              if (sec.id !== sectionId && sec.id !== primarySectionId && typeof content === 'string' && content.trim()) {
+                  secondaryContext += `\nContexto Adicional (${sec.title}): ${content.trim()}\n`;
+              }
+          });
+
+          const ragContext = await getRagContext(title);
+          prompt = `Você é um especialista em planeamento de contratações públicas no Brasil. Sua tarefa é gerar o conteúdo para a seção "${title}" de um Estudo Técnico Preliminar (ETP).
+
+Use o "Contexto Principal" como sua fonte primária de informação. Use o "Contexto Secundário" e os "Resumos de Apoio" para detalhes adicionais e complementares.
+
+--- CONTEXTO PRINCIPAL ---
+${primaryContext}
+--- FIM DO CONTEXTO PRINCIPAL ---
+${secondaryContext ? `\n--- CONTEXTO SECUNDÁRIO ---\n${secondaryContext}\n--- FIM DO CONTEXTO SECUNDÁRIO ---` : ''}
+${ragContext}
+${userPrompt ? `\nInstruções Adicionais do Utilizador: "${userPrompt}"\n` : ''}
+Gere um texto detalhado e tecnicamente correto para a seção "${title}", utilizando a Lei 14.133/21 como referência principal.`;
+
+      } else { // TR
+          if (!loadedEtpForTr) {
+              addNotification('info', 'Atenção', 'Por favor, carregue um ETP para usar como contexto antes de gerar o TR.');
+              setLoadingSection(null);
+              return;
+          }
+
+          const primarySectionId = 'tr-1-objeto';
+          const objetoText = currentSections[primarySectionId] || '';
+          if (sectionId !== primarySectionId && !objetoText.trim()) {
+              addNotification('info', 'Atenção', `Por favor, preencha a seção "${trSections.find(s => s.id === primarySectionId)?.title}" primeiro, pois ela serve de base para as outras.`);
+              setValidationErrors(new Set([primarySectionId]));
+              setLoadingSection(null);
+              return;
+          }
+
+          primaryContext = `--- INÍCIO DO ETP DE CONTEXTO ---\n${loadedEtpForTr.content}\n--- FIM DO ETP DE CONTEXTO ---\n\n--- OBJETO DO TR ---\n${objetoText}\n--- FIM DO OBJETO DO TR ---`;
+          
+          allSections.forEach(sec => {
+              const content = currentSections[sec.id];
+              if (sec.id !== sectionId && sec.id !== primarySectionId && typeof content === 'string' && content.trim()) {
+                  secondaryContext += `\nContexto Adicional do TR já preenchido (${sec.title}): ${content.trim()}\n`;
+              }
+          });
+
+          const ragContext = await getRagContext(title);
+          prompt = `Você é um especialista em licitações públicas no Brasil. Sua tarefa é gerar o conteúdo para a seção "${title}" de um Termo de Referência (TR).
+
+Para isso, utilize as seguintes fontes de informação, em ordem de prioridade:
+1. O Estudo Técnico Preliminar (ETP) e o Objeto do TR (Contexto Principal).
+2. Os documentos de apoio (RAG) e as outras seções do TR já preenchidas (Contexto Secundário).
+
+--- CONTEXTO PRINCIPAL ---
+${primaryContext}
+--- FIM DO CONTEXTO PRINCIPAL ---
+${secondaryContext ? `\n--- CONTEXTO SECUNDÁRIO ---\n${secondaryContext}\n--- FIM DO CONTEXTO SECUNDÁRIO ---` : ''}
+${ragContext}
+${userPrompt ? `\nInstruções Adicionais do Utilizador: "${userPrompt}"\n` : ''}
+Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extraindo e inferindo as informações necessárias das fontes fornecidas.`;
       }
-    } catch (error: any) {
-      addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${error.message}`);
-    } finally {
-        setLoadingSection(null);
-    }
+      
+      const finalPrompt = prompt + (useWebSearch ? webSearchInstruction : '');
+
+      try {
+          const generatedText = await callGemini(finalPrompt, useWebSearch);
+          if (generatedText && !generatedText.startsWith("Erro:")) {
+              setGeneratedContentModal({ docType, sectionId, title, content: generatedText });
+          } else {
+              addNotification('error', 'Erro de Geração', generatedText);
+          }
+      } catch (error: any) {
+          addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${error.message}`);
+      } finally {
+          setLoadingSection(null);
+      }
+  };
+
+
+  const handleOpenDetailedPromptModal = (docType: DocumentType, sectionId: string, title: string) => {
+    setDetailedPromptContext({ docType, sectionId, title });
+    setUserDetailedPrompt(''); // Reset prompt every time
+    setIsDetailedPromptModalOpen(true);
+  };
+  
+  const handleTriggerGeneration = () => {
+    if (!detailedPromptContext) return;
+    const { docType, sectionId, title } = detailedPromptContext;
+    setIsDetailedPromptModalOpen(false);
+    handleGenerate(docType, sectionId, title, userDetailedPrompt);
   };
 
   const handleComplianceCheck = async () => {
@@ -2107,7 +2160,7 @@ Solicitação do usuário: "${refinePrompt}"
                         placeholder={section.placeholder}
                         value={etpSectionsContent[section.id]}
                         onChange={(id, value) => handleSectionChange('etp', id, value)}
-                        onGenerate={() => handleGenerate('etp', section.id, section.title)}
+                        onGenerate={() => handleOpenDetailedPromptModal('etp', section.id, section.title)}
                         hasGen={section.hasGen}
                         onAnalyze={() => handleRiskAnalysis('etp', section.id, section.title)}
                         hasRiskAnalysis={section.hasRiskAnalysis}
@@ -2200,7 +2253,7 @@ Solicitação do usuário: "${refinePrompt}"
                         placeholder={section.placeholder}
                         value={trSectionsContent[section.id]}
                         onChange={(id, value) => handleSectionChange('tr', id, value)}
-                        onGenerate={() => handleGenerate('tr', section.id, section.title)}
+                        onGenerate={() => handleOpenDetailedPromptModal('tr', section.id, section.title)}
                         hasGen={section.hasGen}
                         isLoading={loadingSection === section.id}
                         onAnalyze={() => handleRiskAnalysis('tr', section.id, section.title)}
@@ -2318,6 +2371,38 @@ Solicitação do usuário: "${refinePrompt}"
             </div>
           </div>
         )}
+    </Modal>
+     <Modal 
+      isOpen={isDetailedPromptModalOpen} 
+      onClose={() => setIsDetailedPromptModalOpen(false)} 
+      title={`Gerar conteúdo para: ${detailedPromptContext?.title}`}
+      footer={
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setIsDetailedPromptModalOpen(false)} className="bg-slate-200 text-slate-700 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition-colors">
+            Cancelar
+          </button>
+          <button 
+            onClick={handleTriggerGeneration}
+            className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <Icon name="wand-magic-sparkles" /> Gerar com IA
+          </button>
+        </div>
+      }
+    >
+      <div>
+        <label htmlFor="user-detailed-prompt" className="block text-sm font-medium text-slate-600 mb-2">
+          Forneça instruções adicionais para a IA (opcional):
+        </label>
+        <textarea 
+          id="user-detailed-prompt"
+          value={userDetailedPrompt}
+          onChange={(e) => setUserDetailedPrompt(e.target.value)}
+          placeholder="Ex: 'Seja mais formal', 'Foque nos aspetos de sustentabilidade', 'Crie uma lista com 5 itens...'"
+          className="w-full h-24 p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500"
+        />
+        <p className="text-xs text-slate-500 mt-2">Isto irá guiar a IA para gerar um texto mais alinhado com as suas expectativas.</p>
+      </div>
     </Modal>
 
       <Modal isOpen={!!analysisContent.content} onClose={() => setAnalysisContent({title: '', content: null})} title={analysisContent.title} maxWidth="max-w-3xl">
