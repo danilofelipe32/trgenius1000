@@ -869,8 +869,7 @@ Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extr
           } else {
               addNotification('error', 'Erro de Geração', generatedText);
           }
-// FIX: Use unknown in catch and safely access error message.
-      } catch (error) {
+      } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${message}`);
       } finally {
@@ -960,8 +959,7 @@ ${content}
     try {
         const result = await callGemini(finalPrompt, useWebSearch);
         setComplianceCheckResult(result);
-// FIX: Use unknown in catch and safely access error message.
-    } catch (error) {
+    } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         setComplianceCheckResult(`<p>Erro ao verificar a conformidade: ${message}</p>`);
     } finally {
@@ -1147,8 +1145,7 @@ ${content}
         setProcessingFiles(prev =>
           prev.map(p => (p.name === file.name ? { ...p, status: 'success' } : p))
         );
-// FIX: Use unknown in catch and safely access error message.
-      } catch (error) {
+      } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         setProcessingFiles(prev =>
           prev.map(p =>
@@ -1330,8 +1327,7 @@ Seja técnico, objetivo e use a estrutura HTML fornecida para garantir uma apres
         const analysisResult = await callGemini(finalPrompt, useWebSearch);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
         setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
-// FIX: Use unknown in catch and safely access error message.
-    } catch (error) {
+    } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: `<p>Erro ao realizar análise: ${message}</p>` });
     } finally {
@@ -1367,8 +1363,7 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML origi
         addNotification("error", "Erro ao Refinar", refinedResult);
         setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement })); // Restore original on error
       }
-// FIX: Use unknown in catch and safely access error message.
-    } catch (error) {
+    } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       addNotification('error', 'Erro Inesperado', `Falha ao refinar a análise: ${message}`);
       setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement }));
@@ -1415,8 +1410,7 @@ Solicitação do usuário: "${refinePrompt}"
       } else {
         addNotification("error", "Erro de Refinamento", refinedHtml);
       }
-// FIX: Use unknown in catch and safely access error message.
-    } catch (error) {
+    } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       addNotification('error', 'Erro Inesperado', `Falha ao refinar o texto: ${message}`);
     } finally {
@@ -1520,8 +1514,7 @@ Solicitação do usuário: "${refinePrompt}"
         } else {
           setSummaryState({ loading: false, content: `<p>Erro ao gerar resumo: ${summary}</p>` });
         }
-// FIX: Use unknown in catch and safely access error message.
-      } catch (error) {
+      } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         setSummaryState({ loading: false, content: `<p>Falha inesperada ao gerar resumo: ${message}</p>` });
       }
@@ -2217,14 +2210,13 @@ Solicitação do usuário: "${refinePrompt}"
                                     {section.tooltip && <Icon name="question-circle" className="text-slate-400 cursor-help" title={section.tooltip} />}
                                  </div>
                             </div>
-                            <textarea
-                                id={section.id}
-                                value={etpSectionsContent[section.id] || ''}
-                                onChange={(e) => handleSectionChange('etp', section.id, e.target.value)}
-                                placeholder={section.placeholder}
-                                className="w-full h-24 p-3 bg-slate-50 border rounded-lg focus:ring-2 focus:border-blue-500 transition-colors border-slate-200 focus:ring-blue-500 mb-4"
-                            />
-                            
+                            <div className="mb-4">
+                                <RichTextEditor
+                                    value={etpSectionsContent[section.id] || ''}
+                                    onChange={(html) => handleSectionChange('etp', section.id, html)}
+                                    placeholder={section.placeholder}
+                                />
+                            </div>
                             <AttachmentManager
                                 attachments={etpAttachments}
                                 onAttachmentsChange={setEtpAttachments}
@@ -2310,14 +2302,13 @@ Solicitação do usuário: "${refinePrompt}"
                                     Importar do ETP
                                  </button>
                             </div>
-                            <textarea
-                                id={section.id}
-                                value={trSectionsContent[section.id] || ''}
-                                onChange={(e) => handleSectionChange('tr', section.id, e.target.value)}
-                                placeholder={section.placeholder}
-                                className="w-full h-24 p-3 bg-slate-50 border rounded-lg focus:ring-2 focus:border-blue-500 transition-colors border-slate-200 focus:ring-blue-500 mb-4"
-                            />
-                            
+                             <div className="mb-4">
+                                <RichTextEditor
+                                    value={trSectionsContent[section.id] || ''}
+                                    onChange={(html) => handleSectionChange('tr', section.id, html)}
+                                    placeholder={section.placeholder}
+                                />
+                            </div>
                             <AttachmentManager
                                 attachments={trAttachments}
                                 onAttachmentsChange={setTrAttachments}

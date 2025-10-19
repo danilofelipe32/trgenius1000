@@ -57,7 +57,7 @@ export async function callGemini(prompt: string, useWebSearch: boolean = false):
     return "Erro: A resposta da API não continha texto gerado. Verifique o seu prompt.";
 
     // FIX: Use unknown in catch and safely access error message.
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Erro ao chamar a API Gemini:", error);
 
     const errorMessage = error instanceof Error ? error.message : String(error);

@@ -105,7 +105,7 @@ export const processSingleUploadedFile = async (
       isLocked: false
     };
     // FIX: Use unknown in catch and safely access error message.
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Erro ao processar o ficheiro ${file.name}:`, error);
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(message || `Não foi possível ler o ficheiro.`);
