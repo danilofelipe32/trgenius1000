@@ -390,14 +390,6 @@ const PriorityIndicator: React.FC<{ priority?: Priority }> = ({ priority }) => {
     );
 };
 
-
-const metaSections: Omit<SectionType, 'hasGen' | 'hasRiskAnalysis' | 'isAttachmentSection' | 'hasGen'>[] = [
-  { id: 'meta-objectOfContract', title: 'Objeto da Contratação', placeholder: 'Ex: Aquisição de notebooks...' },
-  { id: 'meta-legalBasis', title: 'Fundamento Legal (Lei 14.133/21)', placeholder: 'Ex: Art. 75, Inciso II, da Lei 14.133/21' },
-  { id: 'meta-demandOrigin', title: 'Origem da Demanda', placeholder: 'Ex: Memorando nº 123/2024 - Setor de TI' },
-  { id: 'meta-managingUnit', title: 'Unidade Gestora', placeholder: 'Ex: Departamento de Compras' },
-];
-
 const PrioritySelector: React.FC<{
   priority: Priority;
   setPriority: (p: Priority) => void;
@@ -770,14 +762,14 @@ const App: React.FC = () => {
     let prompt = '';
     
     if(docType === 'etp') {
-      const demandaText = currentSections['etp-input-demanda'] || '';
-      if(sectionId !== 'etp-input-demanda' && !demandaText.trim()) {
-        addNotification('info', 'Atenção', "Por favor, preencha a seção '2. Demanda' primeiro, pois ela serve de base para as outras.");
-        setValidationErrors(new Set(['etp-input-demanda']));
+      const demandaText = currentSections['etp-2-necessidade'] || '';
+      if(sectionId !== 'etp-2-necessidade' && !demandaText.trim()) {
+        addNotification('info', 'Atenção', "Por favor, preencha a seção '2. Descrição da Necessidade' primeiro, pois ela serve de base para as outras.");
+        setValidationErrors(new Set(['etp-2-necessidade']));
         setLoadingSection(null);
         return;
       }
-      context = `Contexto Principal (Demanda): ${demandaText}\n`;
+      context = `Contexto Principal (Necessidade da Contratação): ${demandaText}\n`;
       allSections.forEach(sec => {
         const content = currentSections[sec.id];
         if (sec.id !== sectionId && typeof content === 'string' && content.trim()) {
@@ -792,10 +784,10 @@ const App: React.FC = () => {
         setLoadingSection(null);
         return;
       }
-      const objetoText = currentSections['tr-input-objeto'] || '';
-      if(sectionId !== 'tr-input-objeto' && !objetoText.trim()) {
-        addNotification('info', 'Atenção', "Por favor, preencha a seção '1. Objeto da Contratação' primeiro, pois ela serve de base para as outras.");
-        setValidationErrors(new Set(['tr-input-objeto']));
+      const objetoText = currentSections['tr-1-objeto'] || '';
+      if(sectionId !== 'tr-1-objeto' && !objetoText.trim()) {
+        addNotification('info', 'Atenção', "Por favor, preencha a seção '1. Objeto' primeiro, pois ela serve de base para as outras.");
+        setValidationErrors(new Set(['tr-1-objeto']));
         setLoadingSection(null);
         return;
       }
@@ -908,17 +900,16 @@ ${content}
 
     const requiredFields: { [key in DocumentType]?: { id: string; name: string }[] } = {
         etp: [
-            { id: 'etp-input-demanda', name: '2. Demanda' },
+            { id: 'etp-2-necessidade', name: '2. Descrição da Necessidade' },
         ],
         tr: [
-            { id: 'tr-input-objeto', name: '1. Objeto da Contratação' },
+            { id: 'tr-1-objeto', name: '1. Objeto' },
         ],
     };
 
     const fieldsToValidate = requiredFields[docType] || [];
 
     fieldsToValidate.forEach(field => {
-        // FIX: Safely call .trim() by ensuring the value from sections is treated as a string.
         if (!sections[field.id] || String(sections[field.id] || '').trim() === '') {
             errors.push(`O campo "${field.name}" é obrigatório.`);
             errorFields.add(field.id);
@@ -1057,7 +1048,6 @@ ${content}
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // FIX: Explicitly type `fileList` as `File[]` to resolve type inference issues with `Array.from(FileList)`.
     const fileList: File[] = Array.from(files);
 
     const filesToProcess = fileList.map(file => ({
@@ -1200,9 +1190,7 @@ ${content}
         }
 
         const trOtherSectionsContext = Object.entries(currentSections)
-            // FIX: Safely call .trim() by ensuring value is a string.
             .filter(([key, value]) => key !== sectionId && value && String(value || '').trim())
-            // FIX: Safely call .trim() by ensuring value is a string.
             .map(([key, value]) => `Contexto da Seção do TR (${trSections.find(s => s.id === key)?.title}):\n${String(value || '').trim()}`)
             .join('\n\n');
         
@@ -1211,7 +1199,6 @@ ${content}
     } else if (docType === 'etp') {
         primaryContext = Object.entries(currentSections)
             .filter(([key, value]) => key !== sectionId && value)
-            // FIX: Safely call .trim() by ensuring value is a string.
             .map(([key, value]) => `Contexto Adicional (${etpSections.find(s => s.id === key)?.title}): ${String(value || '').trim()}`)
             .join('\n');
     }
@@ -1312,7 +1299,6 @@ Solicitação do usuário: "${refinePrompt}"
     const docToExport = docs.find(d => d.id === id);
 
     if (docToExport) {
-        // FIX: Define `allSections` based on the document type before using it.
         const allSections = type === 'etp' ? etpSections : trSections;
         exportDocumentToPDF(docToExport, allSections);
     } else {
@@ -2083,25 +2069,8 @@ Solicitação do usuário: "${refinePrompt}"
             
             <div className={`${activeView === 'etp' ? 'block' : 'hidden'}`}>
                 <div className="bg-white p-6 rounded-xl shadow-sm mb-6 transition-all hover:shadow-md">
-                    <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-3">Dados Gerais do Documento</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
-                        {metaSections.map(meta => (
-                            <div key={meta.id}>
-                                <label htmlFor={`etp-${meta.id}`} className="block text-sm font-medium text-slate-600 mb-1">{meta.title}</label>
-                                <input
-                                    type="text"
-                                    id={`etp-${meta.id}`}
-                                    value={etpSectionsContent[meta.id] || ''}
-                                    onChange={(e) => handleSectionChange('etp', meta.id, e.target.value)}
-                                    placeholder={meta.placeholder}
-                                    className="w-full p-2 bg-slate-50 border rounded-lg focus:ring-2 transition-colors border-slate-200 focus:ring-blue-500"
-                                />
-                            </div>
-                        ))}
-                        <div className="md:col-span-2">
-                           <PrioritySelector priority={currentEtpPriority} setPriority={setCurrentEtpPriority} />
-                        </div>
-                    </div>
+                    <h2 className="text-lg font-semibold text-slate-700 mb-4">Prioridade do Documento</h2>
+                    <PrioritySelector priority={currentEtpPriority} setPriority={setCurrentEtpPriority} />
                 </div>
                 {etpSections.map(section => {
                   if (section.isAttachmentSection) {
@@ -2183,29 +2152,10 @@ Solicitação do usuário: "${refinePrompt}"
                         </div>
                     )}
                 </div>
-
                 <div className="bg-white p-6 rounded-xl shadow-sm mb-6 transition-all hover:shadow-md">
-                    <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-3">Dados Gerais do Documento</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pt-4">
-                        {metaSections.map(meta => (
-                            <div key={meta.id}>
-                                <label htmlFor={`tr-${meta.id}`} className="block text-sm font-medium text-slate-600 mb-1">{meta.title}</label>
-                                <input
-                                    type="text"
-                                    id={`tr-${meta.id}`}
-                                    value={trSectionsContent[meta.id] || ''}
-                                    onChange={(e) => handleSectionChange('tr', meta.id, e.target.value)}
-                                    placeholder={meta.placeholder}
-                                    className="w-full p-2 bg-slate-50 border rounded-lg focus:ring-2 transition-colors border-slate-200 focus:ring-blue-500"
-                                />
-                            </div>
-                        ))}
-                         <div className="md:col-span-2">
-                           <PrioritySelector priority={currentTrPriority} setPriority={setCurrentTrPriority} />
-                        </div>
-                    </div>
+                    <h2 className="text-lg font-semibold text-slate-700 mb-4">Prioridade do Documento</h2>
+                    <PrioritySelector priority={currentTrPriority} setPriority={setCurrentTrPriority} />
                 </div>
-
                 {trSections.map(section => {
                   if (section.isAttachmentSection) {
                     return (
