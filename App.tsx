@@ -364,7 +364,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer,
           {children}
         </div>
         {footer && (
-          <div className="p-5 border-t border-gray-200">
+          <div className="p-5 border-t border-gray-200 bg-slate-50 rounded-b-2xl">
             {footer}
           </div>
         )}
@@ -514,6 +514,12 @@ const App: React.FC = () => {
     title: string;
     content: string;
   } | null>(null);
+
+  // Risk Analysis Refinement State
+  const [isRefiningAnalysis, setIsRefiningAnalysis] = useState(false);
+  const [refineAnalysisPrompt, setRefineAnalysisPrompt] = useState('');
+  const [originalAnalysisForRefinement, setOriginalAnalysisForRefinement] = useState('');
+  const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
 
 
   const priorityFilters: {
@@ -1232,8 +1238,17 @@ ${content}
         return;
     }
 
-    setAnalysisContent({ title: `Analisando Riscos para: ${title}`, content: 'A IA está a pensar... por favor, aguarde.' });
+    setAnalysisContent({ title: `Analisando Riscos para: ${title}`, content: null });
+    setIsAnalysisLoading(true);
 
+    const attachments = docType === 'etp' ? etpAttachments : trAttachments;
+    let attachmentContext = '';
+    if (attachments && attachments.length > 0) {
+        attachmentContext = `\n\n**Anexos para Contexto Adicional:**\nAlém das seções do documento, considere as informações dos seguintes ficheiros anexados (nome e descrição fornecida pelo utilizador):\n${attachments
+            .map(att => `- **${att.name}**: ${att.description || 'Nenhuma descrição fornecida.'}`)
+            .join('\n')}`;
+    }
+    
     const ragContext = await getRagContext(title);
     let primaryContext = '';
     
@@ -1259,13 +1274,14 @@ ${content}
 
     const prompt = `Você é um especialista em gestão de riscos em contratações públicas no Brasil, com profundo conhecimento da Lei 14.133/21. Sua tarefa é realizar uma análise de risco detalhada sobre o conteúdo da seção "${title}" de um ${docType.toUpperCase()}.
 
-Utilize o contexto geral do documento e os documentos de apoio (RAG) para uma análise completa.
+Utilize o contexto geral do documento, os documentos de apoio (RAG) e os anexos listados para uma análise completa.
 
 **Seção a ser analisada:**
 ${sectionContent}
 
-**Contexto Adicional (Outras seções, ETP, etc.):**
+**Contexto Adicional (Outras seções, ETP, anexos, etc.):**
 ${primaryContext}
+${attachmentContext}
 ${ragContext}
 
 **Sua Tarefa Detalhada:**
@@ -1279,7 +1295,7 @@ Analise o conteúdo da seção fornecida e elabore um relatório de riscos detal
 *   **Classificação:**
     *   **Probabilidade:** (Baixa, Média, Alta)
     *   **Impacto:** (Baixo, Médio, Alto) - Descreva brevemente o impacto financeiro, operacional ou legal caso o risco se concretize.
-*   **Nível de Risco:** (Trivial, Tolerável, Substancial, Intolerável) - Com base na combinação de probabilidade e impacto.
+*   **Nível de Risco:** (Baixo, Médio, Alto) - Com base na combinação de probabilidade e impacto.
 *   **Medidas de Mitigação:** Proponha ações claras e práticas para reduzir a probabilidade ou o impacto do risco. Inclua sugestões de como o texto da seção poderia ser ajustado para mitigar o risco.
 *   **Responsável Sugerido:** Indique quem deveria ser o responsável por monitorar e mitigar o risco (ex: Fiscal do Contrato, Gestor, Equipe Técnica).
 
@@ -1292,8 +1308,49 @@ Seja técnico, objetivo e forneça uma análise que agregue valor prático ao pl
     try {
         const analysisResult = await callGemini(finalPrompt, useWebSearch);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
+        setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
     } catch (error: any) {
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: `Erro ao realizar análise: ${error.message}` });
+    } finally {
+        setIsAnalysisLoading(false);
+    }
+  };
+
+  const handleRefineAnalysis = async () => {
+    if (!originalAnalysisForRefinement || !refineAnalysisPrompt) {
+      addNotification('info', 'Aviso', 'Não há análise para refinar ou o prompt está vazio.');
+      return;
+    }
+    
+    setIsAnalysisLoading(true);
+    setAnalysisContent(prev => ({ ...prev, content: null })); // Clear content to show loader
+
+    const prompt = `Você é um assistente especialista em gestão de riscos. A seguir está uma análise de risco original para uma seção de um documento de contratação pública:
+
+--- ANÁLISE ORIGINAL ---
+${originalAnalysisForRefinement}
+--- FIM DA ANÁLISE ORIGINAL ---
+
+Agora, refine esta análise com base na seguinte solicitação do utilizador: "${refineAnalysisPrompt}"
+
+Retorne APENAS a análise refinada completa, mantendo o mesmo formato Markdown original, mas incorporando as melhorias solicitadas. Não adicione comentários ou introduções como "Aqui está a análise refinada:".`;
+    
+    try {
+      const refinedResult = await callGemini(prompt, useWebSearch);
+      if (refinedResult && !refinedResult.startsWith("Erro:")) {
+        setAnalysisContent(prev => ({ ...prev, content: refinedResult }));
+        setOriginalAnalysisForRefinement(refinedResult); // Update the base for further refinements
+      } else {
+        addNotification("error", "Erro ao Refinar", refinedResult);
+        setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement })); // Restore original on error
+      }
+    } catch (error: any) {
+      addNotification('error', 'Erro Inesperado', `Falha ao refinar a análise: ${error.message}`);
+      setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement }));
+    } finally {
+      setIsAnalysisLoading(false);
+      setIsRefiningAnalysis(false);
+      setRefineAnalysisPrompt('');
     }
   };
 
@@ -2406,9 +2463,64 @@ Solicitação do usuário: "${refinePrompt}"
       </div>
     </Modal>
 
-      <Modal isOpen={!!analysisContent.content} onClose={() => setAnalysisContent({title: '', content: null})} title={analysisContent.title} maxWidth="max-w-3xl">
-          <div className="bg-slate-50 p-4 rounded-lg max-h-[60vh] overflow-y-auto">
-            <ContentRenderer text={analysisContent.content} />
+      <Modal 
+        isOpen={!!analysisContent.content} 
+        onClose={() => {
+          setAnalysisContent({ title: '', content: null });
+          setIsRefiningAnalysis(false);
+          setRefineAnalysisPrompt('');
+          setOriginalAnalysisForRefinement('');
+        }} 
+        title={analysisContent.title} 
+        maxWidth="max-w-3xl"
+        footer={
+          <div className="flex flex-col gap-4">
+            {isRefiningAnalysis && (
+              <div className="bg-slate-200 p-4 rounded-lg">
+                <label htmlFor="refine-analysis-prompt" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Peça à IA para refinar a análise acima:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="refine-analysis-prompt"
+                    type="text"
+                    value={refineAnalysisPrompt}
+                    onChange={(e) => setRefineAnalysisPrompt(e.target.value)}
+                    placeholder="Ex: 'Foque nos riscos financeiros' ou 'Sugira mais uma medida de mitigação para o Risco 1'"
+                    className="flex-grow p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                    disabled={isAnalysisLoading}
+                  />
+                  <button
+                    onClick={handleRefineAnalysis}
+                    disabled={!refineAnalysisPrompt || isAnalysisLoading}
+                    className="bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                  >
+                    <Icon name="wand-magic-sparkles" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setIsRefiningAnalysis(!isRefiningAnalysis)}
+                className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition-colors"
+                disabled={isAnalysisLoading}
+              >
+                {isRefiningAnalysis ? 'Cancelar Refinamento' : 'Refinar Análise'}
+              </button>
+            </div>
+          </div>
+        }
+      >
+          <div className="bg-slate-50 p-4 rounded-lg max-h-[60vh] overflow-y-auto min-h-[200px] flex items-center justify-center">
+            {isAnalysisLoading ? (
+               <div className="flex flex-col items-center gap-2 text-slate-600">
+                  <Icon name="spinner" className="fa-spin text-3xl" />
+                  <span>A IA está a processar a sua análise...</span>
+              </div>
+            ) : (
+              <ContentRenderer text={analysisContent.content} />
+            )}
           </div>
       </Modal>
 
