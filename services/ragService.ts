@@ -104,8 +104,10 @@ export const processSingleUploadedFile = async (
       content: base64Content,
       isLocked: false
     };
-  } catch (error: any) {
+    // FIX: Use unknown in catch and safely access error message.
+  } catch (error) {
     console.error(`Erro ao processar o ficheiro ${file.name}:`, error);
-    throw new Error(error.message || `Não foi possível ler o ficheiro.`);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(message || `Não foi possível ler o ficheiro.`);
   }
 };

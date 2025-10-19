@@ -2,6 +2,13 @@ import { SavedDocument, Section } from '../types';
 
 declare const jspdf: any;
 
+const stripHtml = (html: string | null | undefined): string => {
+  if (!html) return '';
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  return tempDiv.textContent || tempDiv.innerText || "";
+};
+
 export const exportDocumentToPDF = (doc: SavedDocument, sections: Section[]) => {
     const { jsPDF } = jspdf;
     const pdf = new jsPDF('p', 'pt', 'a4');
@@ -48,7 +55,7 @@ export const exportDocumentToPDF = (doc: SavedDocument, sections: Section[]) => 
         const content = doc.sections[section.id];
         if (content && String(content).trim()) {
             addText(section.title, { size: 14, isBold: true, spacing: 10 });
-            addText(String(content), { size: 11, spacing: 20 });
+            addText(stripHtml(String(content)), { size: 11, spacing: 20 });
         }
     });
 

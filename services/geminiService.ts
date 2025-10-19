@@ -1,7 +1,7 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-const apiKey = "AIzaSyB1SGptDVNzOh888rzlNSkXCiT5P2goNo0";
-const ai = new GoogleGenAI({ apiKey: apiKey });
+// FIX: Initialize with API key from environment variables per guidelines, removing hardcoded key.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export async function callGemini(prompt: string, useWebSearch: boolean = false): Promise<string> {
   try {
@@ -56,10 +56,11 @@ export async function callGemini(prompt: string, useWebSearch: boolean = false):
     
     return "Erro: A resposta da API não continha texto gerado. Verifique o seu prompt.";
 
-  } catch (error: any) {
+    // FIX: Use unknown in catch and safely access error message.
+  } catch (error) {
     console.error("Erro ao chamar a API Gemini:", error);
 
-    const errorMessage = error.message || '';
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (errorMessage.includes('API key not valid')) {
         return `Erro: A chave de API fornecida não é válida. Verifique se a chave está correta e se a API Generative Language está ativada no seu projeto Google Cloud.`;

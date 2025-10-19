@@ -14,6 +14,14 @@ import { etpTemplates, trTemplates } from './config/templates';
 
 declare const mammoth: any;
 
+// --- Helper Functions ---
+const stripHtml = (html: string | null | undefined): string => {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return doc.body.textContent || "";
+};
+
+
 // --- Notification Component ---
 interface NotificationProps {
   notification: NotificationType;
@@ -91,93 +99,9 @@ const Notification: React.FC<NotificationProps> = ({ notification, onClose }) =>
 };
 
 
-// --- Content Renderer with Professional Formatting ---
-const ContentRenderer: React.FC<{ text: string | null; className?: string }> = ({ text, className }) => {
-    if (!text) return null;
-
-    const parseInline = (line: string): React.ReactNode => {
-        const nodes: React.ReactNode[] = [];
-        let lastIndex = 0;
-        // Regex for Markdown links, standalone URLs, and bold text
-        const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(\bhttps?:\/\/[^\s()<>]+[^\s.,'"`?!;:]*[^\s.,'"`?!;:)])|(\*\*(.*?)\*\*)/g;
-
-        let match;
-        while ((match = regex.exec(line)) !== null) {
-            // Add text before the match
-            if (match.index > lastIndex) {
-                nodes.push(line.substring(lastIndex, match.index));
-            }
-            
-            const [_fullMatch, markdownBlock, markdownText, markdownUrl, standaloneUrl, boldBlock, boldText] = match;
-
-            if (markdownBlock) {
-                nodes.push(<a href={markdownUrl} key={lastIndex} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">{markdownText}</a>);
-            } else if (standaloneUrl) {
-                nodes.push(<a href={standaloneUrl} key={lastIndex} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">{standaloneUrl}</a>);
-            } else if (boldBlock) {
-                nodes.push(<strong key={lastIndex} className="font-semibold text-slate-800">{boldText}</strong>);
-            }
-            
-            lastIndex = regex.lastIndex;
-        }
-
-        // Add remaining text
-        if (lastIndex < line.length) {
-            nodes.push(line.substring(lastIndex));
-        }
-
-        return nodes.map((node, i) => <React.Fragment key={i}>{node}</React.Fragment>);
-    };
-
-    const elements: React.ReactNode[] = [];
-    const lines = text.split('\n');
-    let listItems: string[] = [];
-    let listType: 'ul' | 'ol' | null = null;
-    
-    const flushList = () => {
-        if (listItems.length > 0 && listType) {
-            const listKey = `list-${elements.length}`;
-            const items = listItems.map((item, i) => <li key={`${listKey}-${i}`} className="pb-1">{parseInline(item)}</li>);
-            if (listType === 'ul') {
-                elements.push(<ul key={listKey} className="space-y-1 my-3 list-disc list-inside pl-2 text-slate-700">{items}</ul>);
-            } else {
-                elements.push(<ol key={listKey} className="space-y-1 my-3 list-decimal list-inside pl-2 text-slate-700">{items}</ul>);
-            }
-        }
-        listItems = [];
-        listType = null;
-    };
-
-    lines.forEach((line, index) => {
-        if (line.startsWith('### ')) { flushList(); elements.push(<h3 key={index} className="text-base font-bold text-slate-700 mt-4 mb-1">{parseInline(line.substring(4))}</h3>); return; }
-        if (line.startsWith('## ')) { flushList(); elements.push(<h2 key={index} className="text-lg font-bold text-slate-800 mt-5 mb-2 pb-1 border-b border-slate-200">{parseInline(line.substring(3))}</h2>); return; }
-        if (line.startsWith('# ')) { flushList(); elements.push(<h1 key={index} className="text-xl font-extrabold text-slate-900 mt-2 mb-3 pb-2 border-b border-slate-300">{parseInline(line.substring(2))}</h1>); return; }
-        if (line.trim() === '---') { flushList(); elements.push(<hr key={index} className="my-4 border-slate-200" />); return; }
-        
-        const ulMatch = line.match(/^\s*[\*-]\s+(.*)/);
-        if (ulMatch) {
-            if (listType !== 'ul') flushList();
-            listType = 'ul';
-            listItems.push(ulMatch[1]);
-            return;
-        }
-
-        const olMatch = line.match(/^\s*\d+\.\s+(.*)/);
-        if (olMatch) {
-            if (listType !== 'ol') flushList();
-            listType = 'ol';
-            listItems.push(olMatch[1]);
-            return;
-        }
-        
-        flushList();
-        
-        if (line.trim() !== '') {
-            elements.push(<p key={index} className="leading-relaxed my-2 text-slate-700">{parseInline(line)}</p>);
-        }
-    });
-    
-    flushList();
+// --- Content Renderer ---
+const ContentRenderer: React.FC<{ htmlContent: string | null; className?: string }> = ({ htmlContent, className }) => {
+    if (!htmlContent) return null;
 
     return (
       <div className={`relative p-5 rounded-lg border bg-white shadow-sm ${className || ''}`}>
@@ -185,11 +109,102 @@ const ContentRenderer: React.FC<{ text: string | null; className?: string }> = (
           <Icon name="brain" className="text-sm" />
           <span>TR GENIUS</span>
         </div>
-        <div className="pt-4">
-          {elements}
-        </div>
+        <div className="pt-4 prose" dangerouslySetInnerHTML={{ __html: htmlContent }} />
       </div>
     );
+};
+
+// --- Rich Text Editor Component ---
+interface RichTextEditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeholder, disabled }) => {
+  const editorRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (editorRef.current && value !== editorRef.current.innerHTML) {
+      editorRef.current.innerHTML = value || '';
+    }
+  }, [value]);
+
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    onChange(e.currentTarget.innerHTML);
+  };
+  
+  const execCmd = (command: string, value: string | null = null) => {
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      onChange(editorRef.current.innerHTML);
+    }
+    forceUpdate(); // Force re-render to update button states
+  };
+  
+  const handleCreateLink = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
+      alert("Por favor, selecione o texto que pretende transformar num link.");
+      return;
+    }
+    const url = prompt("Introduza o URL:", "https://");
+    if (url) {
+      execCmd('createLink', url);
+    }
+  };
+  
+  const [updateKey, setUpdateKey] = useState(0);
+  const forceUpdate = () => setUpdateKey(k => k + 1);
+
+  const getCommandState = (command: string) => {
+    if (typeof document !== 'undefined') {
+      return document.queryCommandState(command);
+    }
+    return false;
+  };
+
+  return (
+    <div className="border border-slate-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 bg-white">
+      {!disabled && (
+        <div className="toolbar flex items-center gap-1 p-2 border-b border-slate-200 flex-wrap bg-slate-50" onMouseDown={(e) => e.preventDefault()}>
+          <button type="button" onClick={() => execCmd('bold')} className={`w-8 h-8 rounded transition-colors ${getCommandState('bold') ? 'bg-blue-200 text-blue-800' : 'text-slate-700 hover:bg-slate-200'}`} title="Negrito"><Icon name="bold" /></button>
+          <button type="button" onClick={() => execCmd('italic')} className={`w-8 h-8 rounded transition-colors ${getCommandState('italic') ? 'bg-blue-200 text-blue-800' : 'text-slate-700 hover:bg-slate-200'}`} title="Itálico"><Icon name="italic" /></button>
+          <button type="button" onClick={() => execCmd('insertUnorderedList')} className={`w-8 h-8 rounded transition-colors ${getCommandState('insertUnorderedList') ? 'bg-blue-200 text-blue-800' : 'text-slate-700 hover:bg-slate-200'}`} title="Lista com Marcadores"><Icon name="list-ul" /></button>
+          <button type="button" onClick={() => execCmd('insertOrderedList')} className={`w-8 h-8 rounded transition-colors ${getCommandState('insertOrderedList') ? 'bg-blue-200 text-blue-800' : 'text-slate-700 hover:bg-slate-200'}`} title="Lista Numerada"><Icon name="list-ol" /></button>
+          <button type="button" onClick={handleCreateLink} className="w-8 h-8 rounded text-slate-700 hover:bg-slate-200 transition-colors" title="Inserir Link"><Icon name="link" /></button>
+        </div>
+      )}
+      <div
+        key={updateKey}
+        ref={editorRef}
+        contentEditable={!disabled}
+        onInput={handleInput}
+        onKeyUp={forceUpdate}
+        onMouseUp={forceUpdate}
+        className={`rich-text-editor w-full h-40 p-3 bg-slate-50 focus:outline-none overflow-y-auto ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        data-placeholder={placeholder}
+        dangerouslySetInnerHTML={{ __html: value || ''}}
+       />
+       <style>{`
+        .rich-text-editor:empty:not(:focus):before {
+          content: attr(data-placeholder);
+          color: #94a3b8; /* slate-400 */
+          pointer-events: none;
+          display: block;
+        }
+        .rich-text-editor ul, .rich-text-editor ol {
+          padding-left: 24px;
+          margin: 8px 0;
+        }
+        .rich-text-editor ul { list-style-type: disc; }
+        .rich-text-editor ol { list-style-type: decimal; }
+        .rich-text-editor a { color: #2563eb; text-decoration: underline; }
+       `}</style>
+    </div>
+  );
 };
 
 
@@ -253,18 +268,18 @@ interface SectionProps {
   hasGen: boolean;
   onAnalyze?: () => void;
   hasRiskAnalysis?: boolean;
-  onEdit?: () => void;
+  onRefine?: () => void;
   isLoading?: boolean;
   hasError?: boolean;
   tooltip?: string;
 }
 
-const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChange, onGenerate, hasGen, onAnalyze, hasRiskAnalysis, onEdit, isLoading, hasError, tooltip }) => {
+const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChange, onGenerate, hasGen, onAnalyze, hasRiskAnalysis, onRefine, isLoading, hasError, tooltip }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = () => {
     if (!value || !navigator.clipboard) return;
-    navigator.clipboard.writeText(value).then(() => {
+    navigator.clipboard.writeText(stripHtml(value)).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     });
@@ -278,7 +293,7 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
             {tooltip && <Icon name="question-circle" className="text-slate-400 cursor-help" title={tooltip} />}
         </div>
         <div className="w-full sm:w-auto flex items-stretch gap-2 flex-wrap">
-           {value && String(value || '').trim().length > 0 && (
+           {value && stripHtml(value).trim().length > 0 && (
              <button
               onClick={handleCopy}
               className={`flex-1 flex items-center justify-center text-center px-3 py-2 text-xs font-semibold rounded-lg transition-colors min-w-[calc(50%-0.25rem)] sm:min-w-0 ${isCopied ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
@@ -288,14 +303,14 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
               <span>{isCopied ? 'Copiado!' : 'Copiar'}</span>
             </button>
            )}
-           {value && String(value || '').trim().length > 0 && onEdit && (
+           {value && stripHtml(value).trim().length > 0 && onRefine && (
              <button
-              onClick={onEdit}
+              onClick={onRefine}
               className="flex-1 flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors min-w-[calc(50%-0.25rem)] sm:min-w-0"
-              title="Editar e Refinar"
+              title="Refinar conteúdo com IA"
             >
               <Icon name="pencil-alt" className="mr-2" />
-              <span>Editar/Refinar</span>
+              <span>Refinar com IA</span>
             </button>
           )}
           {hasRiskAnalysis && onAnalyze && (
@@ -321,13 +336,11 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
         </div>
       </div>
       <div className="relative">
-        <textarea
-          id={id}
-          value={value || ''}
-          onChange={(e) => onChange(id, e.target.value)}
-          placeholder={isLoading ? 'A IA está a gerar o conteúdo...' : placeholder}
-          className={`w-full h-40 p-3 bg-slate-50 border rounded-lg focus:ring-2 transition-colors ${hasError ? 'border-red-500 ring-red-200' : 'border-slate-200 focus:ring-blue-500'} ${isLoading ? 'opacity-50' : ''}`}
-          disabled={isLoading}
+        <RichTextEditor
+            value={value || ''}
+            onChange={(html) => onChange(id, html)}
+            placeholder={isLoading ? 'A IA está a gerar o conteúdo...' : placeholder}
+            disabled={isLoading}
         />
         {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-50/70 rounded-lg pointer-events-none">
@@ -468,9 +481,9 @@ const App: React.FC = () => {
   const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   
-  // Edit Modal State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingContent, setEditingContent] = useState<{ docType: DocumentType; sectionId: string; title: string; text: string } | null>(null);
+  // Refine Modal State
+  const [isRefineModalOpen, setIsRefineModalOpen] = useState(false);
+  const [refiningContent, setRefiningContent] = useState<{ docType: DocumentType; sectionId: string; title: string; text: string } | null>(null);
   const [refinePrompt, setRefinePrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
 
@@ -776,7 +789,7 @@ const App: React.FC = () => {
 
       if (docType === 'etp') {
           const primarySectionId = 'etp-2-necessidade';
-          const necessidadeText = currentSections[primarySectionId] || '';
+          const necessidadeText = stripHtml(currentSections[primarySectionId]);
 
           if (sectionId !== primarySectionId && !necessidadeText.trim()) {
               addNotification('info', 'Atenção', `Por favor, preencha a seção "${etpSections.find(s => s.id === primarySectionId)?.title}" primeiro, pois ela serve de base para as outras.`);
@@ -787,8 +800,8 @@ const App: React.FC = () => {
 
           primaryContext = `Contexto Principal (Necessidade da Contratação): ${necessidadeText}\n`;
           allSections.forEach(sec => {
-              const content = currentSections[sec.id];
-              if (sec.id !== sectionId && sec.id !== primarySectionId && typeof content === 'string' && content.trim()) {
+              const content = stripHtml(currentSections[sec.id]);
+              if (sec.id !== sectionId && sec.id !== primarySectionId && content.trim()) {
                   secondaryContext += `\nContexto Adicional (${sec.title}): ${content.trim()}\n`;
               }
           });
@@ -804,7 +817,7 @@ ${primaryContext}
 ${secondaryContext ? `\n--- CONTEXTO SECUNDÁRIO ---\n${secondaryContext}\n--- FIM DO CONTEXTO SECUNDÁRIO ---` : ''}
 ${ragContext}
 ${userPrompt ? `\nInstruções Adicionais do Utilizador: "${userPrompt}"\n` : ''}
-Gere um texto detalhado e tecnicamente correto para a seção "${title}", utilizando a Lei 14.133/21 como referência principal.`;
+Gere um texto detalhado e tecnicamente correto para a seção "${title}", utilizando a Lei 14.133/21 como referência principal. A resposta deve ser formatada em HTML, usando tags como <p>, <strong>, <em>, <ul> e <li> para uma apresentação clara e profissional.`;
 
       } else { // TR
           if (!loadedEtpForTr) {
@@ -814,7 +827,7 @@ Gere um texto detalhado e tecnicamente correto para a seção "${title}", utiliz
           }
 
           const primarySectionId = 'tr-1-objeto';
-          const objetoText = currentSections[primarySectionId] || '';
+          const objetoText = stripHtml(currentSections[primarySectionId]);
           if (sectionId !== primarySectionId && !objetoText.trim()) {
               addNotification('info', 'Atenção', `Por favor, preencha a seção "${trSections.find(s => s.id === primarySectionId)?.title}" primeiro, pois ela serve de base para as outras.`);
               setValidationErrors(new Set([primarySectionId]));
@@ -825,8 +838,8 @@ Gere um texto detalhado e tecnicamente correto para a seção "${title}", utiliz
           primaryContext = `--- INÍCIO DO ETP DE CONTEXTO ---\n${loadedEtpForTr.content}\n--- FIM DO ETP DE CONTEXTO ---\n\n--- OBJETO DO TR ---\n${objetoText}\n--- FIM DO OBJETO DO TR ---`;
           
           allSections.forEach(sec => {
-              const content = currentSections[sec.id];
-              if (sec.id !== sectionId && sec.id !== primarySectionId && typeof content === 'string' && content.trim()) {
+              const content = stripHtml(currentSections[sec.id]);
+              if (sec.id !== sectionId && sec.id !== primarySectionId && content.trim()) {
                   secondaryContext += `\nContexto Adicional do TR já preenchido (${sec.title}): ${content.trim()}\n`;
               }
           });
@@ -844,7 +857,7 @@ ${primaryContext}
 ${secondaryContext ? `\n--- CONTEXTO SECUNDÁRIO ---\n${secondaryContext}\n--- FIM DO CONTEXTO SECUNDÁRIO ---` : ''}
 ${ragContext}
 ${userPrompt ? `\nInstruções Adicionais do Utilizador: "${userPrompt}"\n` : ''}
-Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extraindo e inferindo as informações necessárias das fontes fornecidas.`;
+Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extraindo e inferindo as informações necessárias das fontes fornecidas. A resposta deve ser formatada em HTML, usando tags como <p>, <strong>, <em>, <ul> e <li> para uma apresentação clara e profissional.`;
       }
       
       const finalPrompt = prompt + (useWebSearch ? webSearchInstruction : '');
@@ -856,8 +869,10 @@ Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extr
           } else {
               addNotification('error', 'Erro de Geração', generatedText);
           }
-      } catch (error: any) {
-          addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${error.message}`);
+// FIX: Use unknown in catch and safely access error message.
+      } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${message}`);
       } finally {
           setLoadingSection(null);
       }
@@ -884,8 +899,8 @@ Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extr
 
     const trSectionsForAnalysis = trSections
         .map(section => {
-            const content = trSectionsContent[section.id] || '';
-            if (content && String(content).trim()) {
+            const content = stripHtml(trSectionsContent[section.id]);
+            if (content.trim()) {
                 const legalReference = section.tooltip?.match(/Conforme (Art\. [\s\S]+)/)?.[1]?.split('.')[0] || 'Não especificado';
                 return `
 ---
@@ -902,7 +917,7 @@ ${content}
         .join('\n');
 
     if (!trSectionsForAnalysis.trim()) {
-        setComplianceCheckResult('O Termo de Referência está vazio. Por favor, preencha as seções antes de verificar a conformidade.');
+        setComplianceCheckResult('<p>O Termo de Referência está vazio. Por favor, preencha as seções antes de verificar a conformidade.</p>');
         setIsCheckingCompliance(false);
         return;
     }
@@ -925,19 +940,19 @@ ${content}
     **Sua Tarefa:**
     Analise CADA seção do Termo de Referência fornecido, comparando o conteúdo da seção com a sua respectiva "Referência Legal" indicada.
 
-    Elabore um relatório de conformidade detalhado em formato Markdown. O relatório deve conter:
+    Elabore um relatório de conformidade detalhado em formato HTML. O relatório deve conter:
 
-    1.  **Análise por Seção:** Para cada seção do TR, crie um subtítulo e detalhe os seguintes pontos:
-        *   **Referência Legal:** Repita o artigo da lei correspondente.
-        *   **Análise:** Comente de forma objetiva se o conteúdo da seção atende aos requisitos do artigo.
-        *   **Status:** Classifique a seção com um dos seguintes emojis e rótulos: "✅ **Conforme**", "⚠️ **Ponto de Atenção**" (se estiver incompleto ou ambíguo), ou "❌ **Não Conforme**" (se contradiz a lei ou omite informação crucial).
-        *   **Recomendação:** Se o status for de atenção ou não conforme, forneça uma sugestão clara e prática para ajustar o texto e adequá-lo à legislação.
+    1.  **Análise por Seção:** Para cada seção do TR, crie um subtítulo (ex: <h2>Análise da Seção: Objeto</h2>) e detalhe os seguintes pontos:
+        *   <p><strong>Referência Legal:</strong> Repita o artigo da lei correspondente.</p>
+        *   <p><strong>Análise:</strong> Comente de forma objetiva se o conteúdo da seção atende aos requisitos do artigo.</p>
+        *   <p><strong>Status:</strong> Classifique a seção com um dos seguintes emojis e rótulos: "✅ <strong>Conforme</strong>", "⚠️ <strong>Ponto de Atenção</strong>" (se estiver incompleto ou ambíguo), ou "❌ <strong>Não Conforme</strong>" (se contradiz a lei ou omite informação crucial).</p>
+        *   <p><strong>Recomendação:</strong> Se o status for de atenção ou não conforme, forneça uma sugestão clara e prática para ajustar o texto e adequá-lo à legislação.</p>
 
-    2.  **Resumo Geral:** Ao final, adicione uma seção de resumo com:
-        *   **Pontos Fortes:** Um resumo dos principais pontos positivos do documento.
-        *   **Principais Pontos a Melhorar:** Um resumo dos pontos mais críticos que precisam de ajuste em todo o documento.
+    2.  **Resumo Geral:** Ao final, adicione uma seção de resumo (ex: <h2>Resumo Geral</h2>) com:
+        *   <h3>Pontos Fortes:</h3> <p>Um resumo dos principais pontos positivos do documento.</p>
+        *   <h3>Principais Pontos a Melhorar:</h3> <p>Um resumo dos pontos mais críticos que precisam de ajuste em todo o documento.</p>
 
-    Seja técnico, objetivo e didático. A estrutura do seu relatório é crucial para a clareza da análise.
+    Seja técnico, objetivo e didático. Use tags HTML como <p>, <strong>, <ul>, <li>, <h2> e <h3> para estruturar a sua resposta de forma clara.
     `;
     
     const finalPrompt = prompt + (useWebSearch ? webSearchInstruction : '');
@@ -945,8 +960,10 @@ ${content}
     try {
         const result = await callGemini(finalPrompt, useWebSearch);
         setComplianceCheckResult(result);
-    } catch (error: any) {
-        setComplianceCheckResult(`Erro ao verificar a conformidade: ${error.message}`);
+// FIX: Use unknown in catch and safely access error message.
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setComplianceCheckResult(`<p>Erro ao verificar a conformidade: ${message}</p>`);
     } finally {
         setIsCheckingCompliance(false);
     }
@@ -969,7 +986,7 @@ ${content}
     const fieldsToValidate = requiredFields[docType] || [];
 
     fieldsToValidate.forEach(field => {
-        if (!sections[field.id] || String(sections[field.id] || '').trim() === '') {
+        if (!sections[field.id] || stripHtml(sections[field.id]).trim() === '') {
             errors.push(`O campo "${field.name}" é obrigatório.`);
             errorFields.add(field.id);
         }
@@ -1130,10 +1147,12 @@ ${content}
         setProcessingFiles(prev =>
           prev.map(p => (p.name === file.name ? { ...p, status: 'success' } : p))
         );
-      } catch (error: any) {
+// FIX: Use unknown in catch and safely access error message.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         setProcessingFiles(prev =>
           prev.map(p =>
-            p.name === file.name ? { ...p, status: 'error', message: error.message } : p
+            p.name === file.name ? { ...p, status: 'error', message: message } : p
           )
         );
       }
@@ -1201,7 +1220,7 @@ ${content}
     const etp = savedETPs.find(e => e.id === parseInt(etpId, 10));
     if (etp) {
         const content = etpSections
-            .map(section => `## ${section.title}\n${etp.sections[section.id] || 'Não preenchido.'}`)
+            .map(section => `## ${section.title}\n${stripHtml(etp.sections[section.id]) || 'Não preenchido.'}`)
             .join('\n\n');
         setLoadedEtpForTr({ id: etp.id, name: etp.name, content });
         addNotification('success', 'Contexto Carregado', `O ETP "${etp.name}" foi carregado com sucesso para o TR.`);
@@ -1231,9 +1250,9 @@ ${content}
 
   const handleRiskAnalysis = async (docType: DocumentType, sectionId: string, title: string) => {
     const currentSections = docType === 'etp' ? etpSectionsContent : trSectionsContent;
-    const sectionContent = currentSections[sectionId];
+    const sectionContent = stripHtml(currentSections[sectionId]);
 
-    if (!sectionContent || String(sectionContent || '').trim() === '') {
+    if (!sectionContent.trim()) {
         addNotification('info', 'Aviso', `Por favor, preencha ou gere o conteúdo da seção "${title}" antes de realizar a análise de riscos.`);
         return;
     }
@@ -1259,8 +1278,8 @@ ${content}
         }
 
         const trOtherSectionsContext = Object.entries(currentSections)
-            .filter(([key, value]) => key !== sectionId && value && String(value || '').trim())
-            .map(([key, value]) => `Contexto da Seção do TR (${trSections.find(s => s.id === key)?.title}):\n${String(value || '').trim()}`)
+            .filter(([key, value]) => key !== sectionId && value && stripHtml(value).trim())
+            .map(([key, value]) => `Contexto da Seção do TR (${trSections.find(s => s.id === key)?.title}):\n${stripHtml(value).trim()}`)
             .join('\n\n');
         
         primaryContext = `${etpContext}${trOtherSectionsContext}`;
@@ -1268,11 +1287,11 @@ ${content}
     } else if (docType === 'etp') {
         primaryContext = Object.entries(currentSections)
             .filter(([key, value]) => key !== sectionId && value)
-            .map(([key, value]) => `Contexto Adicional (${etpSections.find(s => s.id === key)?.title}): ${String(value || '').trim()}`)
+            .map(([key, value]) => `Contexto Adicional (${etpSections.find(s => s.id === key)?.title}): ${stripHtml(value).trim()}`)
             .join('\n');
     }
 
-    const prompt = `Você é um especialista em gestão de riscos em contratações públicas no Brasil, com profundo conhecimento da Lei 14.133/21. Sua tarefa é realizar uma análise de risco detalhada sobre o conteúdo da seção "${title}" de um ${docType.toUpperCase()}.
+    const prompt = `Você é um especialista em gestão de riscos em contratações públicas no Brasil. Sua tarefa é realizar uma análise de risco detalhada sobre o conteúdo da seção "${title}" de um ${docType.toUpperCase()}.
 
 Utilize o contexto geral do documento, os documentos de apoio (RAG) e os anexos listados para uma análise completa.
 
@@ -1285,23 +1304,25 @@ ${attachmentContext}
 ${ragContext}
 
 **Sua Tarefa Detalhada:**
-Analise o conteúdo da seção fornecida e elabore um relatório de riscos detalhado em formato Markdown. O relatório deve seguir a estrutura abaixo para CADA risco identificado (identifique de 3 a 5 riscos principais):
+Analise o conteúdo da seção fornecida e elabore um relatório de riscos detalhado em formato HTML. O relatório deve seguir a estrutura abaixo para CADA risco identificado (identifique de 3 a 5 riscos principais):
 
----
+<hr>
+<h3>Risco [Nº]: [Nome do Risco]</h3>
+<ul>
+  <li><strong>Descrição:</strong> Detalhe o risco, explicando como ele pode se manifestar com base no conteúdo da seção e no contexto geral da contratação.</li>
+  <li><strong>Causa Raiz:</strong> Aponte as possíveis causas ou gatilhos para a ocorrência deste risco.</li>
+  <li><strong>Classificação:</strong>
+    <ul>
+      <li><strong>Probabilidade:</strong> (Baixa, Média, Alta)</li>
+      <li><strong>Impacto:</strong> (Baixo, Médio, Alto) - Descreva brevemente o impacto financeiro, operacional ou legal caso o risco se concretize.</li>
+    </ul>
+  </li>
+  <li><strong>Nível de Risco:</strong> (Baixo, Médio, Alto) - Com base na combinação de probabilidade e impacto.</li>
+  <li><strong>Medidas de Mitigação:</strong> Proponha ações claras e práticas para reduzir a probabilidade ou o impacto do risco. Inclua sugestões de como o texto da seção poderia ser ajustado para mitigar o risco.</li>
+  <li><strong>Responsável Sugerido:</strong> Indique quem deveria ser o responsável por monitorar e mitigar o risco (ex: Fiscal do Contrato, Gestor, Equipe Técnica).</li>
+</ul>
 
-**Risco [Nº]: [Nome do Risco]**
-*   **Descrição:** Detalhe o risco, explicando como ele pode se manifestar com base no conteúdo da seção e no contexto geral da contratação.
-*   **Causa Raiz:** Aponte as possíveis causas ou gatilhos para a ocorrência deste risco.
-*   **Classificação:**
-    *   **Probabilidade:** (Baixa, Média, Alta)
-    *   **Impacto:** (Baixo, Médio, Alto) - Descreva brevemente o impacto financeiro, operacional ou legal caso o risco se concretize.
-*   **Nível de Risco:** (Baixo, Médio, Alto) - Com base na combinação de probabilidade e impacto.
-*   **Medidas de Mitigação:** Proponha ações claras e práticas para reduzir a probabilidade ou o impacto do risco. Inclua sugestões de como o texto da seção poderia ser ajustado para mitigar o risco.
-*   **Responsável Sugerido:** Indique quem deveria ser o responsável por monitorar e mitigar o risco (ex: Fiscal do Contrato, Gestor, Equipe Técnica).
-
----
-
-Seja técnico, objetivo e forneça uma análise que agregue valor prático ao planejamento da contratação.`;
+Seja técnico, objetivo e use a estrutura HTML fornecida para garantir uma apresentação clara e organizada.`;
     
     const finalPrompt = prompt + (useWebSearch ? webSearchInstruction : '');
 
@@ -1309,8 +1330,10 @@ Seja técnico, objetivo e forneça uma análise que agregue valor prático ao pl
         const analysisResult = await callGemini(finalPrompt, useWebSearch);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
         setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
-    } catch (error: any) {
-        setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: `Erro ao realizar análise: ${error.message}` });
+// FIX: Use unknown in catch and safely access error message.
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: `<p>Erro ao realizar análise: ${message}</p>` });
     } finally {
         setIsAnalysisLoading(false);
     }
@@ -1325,7 +1348,7 @@ Seja técnico, objetivo e forneça uma análise que agregue valor prático ao pl
     setIsAnalysisLoading(true);
     setAnalysisContent(prev => ({ ...prev, content: null })); // Clear content to show loader
 
-    const prompt = `Você é um assistente especialista em gestão de riscos. A seguir está uma análise de risco original para uma seção de um documento de contratação pública:
+    const prompt = `Você é um assistente especialista em gestão de riscos. A seguir está uma análise de risco original em formato HTML:
 
 --- ANÁLISE ORIGINAL ---
 ${originalAnalysisForRefinement}
@@ -1333,7 +1356,7 @@ ${originalAnalysisForRefinement}
 
 Agora, refine esta análise com base na seguinte solicitação do utilizador: "${refineAnalysisPrompt}"
 
-Retorne APENAS a análise refinada completa, mantendo o mesmo formato Markdown original, mas incorporando as melhorias solicitadas. Não adicione comentários ou introduções como "Aqui está a análise refinada:".`;
+Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML original, mas incorporando as melhorias solicitadas. Não adicione comentários ou introduções como "Aqui está a análise refinada:".`;
     
     try {
       const refinedResult = await callGemini(prompt, useWebSearch);
@@ -1344,8 +1367,10 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato Markdown o
         addNotification("error", "Erro ao Refinar", refinedResult);
         setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement })); // Restore original on error
       }
-    } catch (error: any) {
-      addNotification('error', 'Erro Inesperado', `Falha ao refinar a análise: ${error.message}`);
+// FIX: Use unknown in catch and safely access error message.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addNotification('error', 'Erro Inesperado', `Falha ao refinar a análise: ${message}`);
       setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement }));
     } finally {
       setIsAnalysisLoading(false);
@@ -1354,49 +1379,46 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato Markdown o
     }
   };
 
-  const handleOpenEditModal = (docType: DocumentType, sectionId: string, title: string) => {
+  const handleOpenRefineModal = (docType: DocumentType, sectionId: string, title: string) => {
     const content = (docType === 'etp' ? etpSectionsContent : trSectionsContent)[sectionId] || '';
-    setEditingContent({ docType, sectionId, title, text: content });
-    setIsEditModalOpen(true);
+    setRefiningContent({ docType, sectionId, title, text: content });
+    setIsRefineModalOpen(true);
   };
   
-  const closeEditModal = () => {
-    setIsEditModalOpen(false);
-    setEditingContent(null);
+  const closeRefineModal = () => {
+    setIsRefineModalOpen(false);
+    setRefiningContent(null);
     setRefinePrompt('');
     setIsRefining(false);
   };
   
-  const handleSaveChanges = () => {
-    if (!editingContent) return;
-    const { docType, sectionId, text } = editingContent;
-    handleSectionChange(docType, sectionId, text);
-    closeEditModal();
-  };
-  
   const handleRefineText = async () => {
-    if (!editingContent || !refinePrompt) return;
+    if (!refiningContent || !refinePrompt) return;
     setIsRefining(true);
     
-    const prompt = `Você é um assistente de redação especializado em documentos públicos. Refine o texto a seguir com base na solicitação do usuário. Retorne apenas o texto refinado, sem introduções ou observações.
+    const prompt = `Você é um assistente de redação especializado em documentos públicos. O texto original está em HTML. Refine o texto a seguir com base na solicitação do usuário. Retorne APENAS o HTML refinado, sem introduções ou observações, mantendo a estrutura e formatação.
 
---- INÍCIO DO TEXTO ORIGINAL ---
-${editingContent.text}
---- FIM DO TEXTO ORIGINAL ---
+--- INÍCIO DO HTML ORIGINAL ---
+${refiningContent.text}
+--- FIM DO HTML ORIGINAL ---
 
 Solicitação do usuário: "${refinePrompt}"
 
---- TEXTO REFINADO ---`;
+--- HTML REFINADO ---`;
 
     try {
-      const refinedText = await callGemini(prompt, useWebSearch);
-      if (refinedText && !refinedText.startsWith("Erro:")) {
-        setEditingContent({ ...editingContent, text: refinedText });
+      const refinedHtml = await callGemini(prompt, useWebSearch);
+      if (refinedHtml && !refinedHtml.startsWith("Erro:")) {
+        handleSectionChange(refiningContent.docType, refiningContent.sectionId, refinedHtml);
+        addNotification('success', 'Sucesso', 'O texto foi refinado pela IA.');
+        closeRefineModal();
       } else {
-        addNotification("error", "Erro de Refinamento", refinedText);
+        addNotification("error", "Erro de Refinamento", refinedHtml);
       }
-    } catch (error: any) {
-      addNotification('error', 'Erro Inesperado', `Falha ao refinar o texto: ${error.message}`);
+// FIX: Use unknown in catch and safely access error message.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addNotification('error', 'Erro Inesperado', `Falha ao refinar o texto: ${message}`);
     } finally {
       setIsRefining(false);
     }
@@ -1456,8 +1478,8 @@ Solicitação do usuário: "${refinePrompt}"
       const allSections = type === 'etp' ? etpSections : trSections;
       const documentText = allSections
         .map(section => {
-          const content = doc.sections[section.id];
-          if (content && String(content).trim()) {
+          const content = stripHtml(doc.sections[section.id]);
+          if (content.trim()) {
             return `### ${section.title}\n${content}`;
           }
           return null;
@@ -1466,7 +1488,7 @@ Solicitação do usuário: "${refinePrompt}"
         .join('\n\n---\n\n');
 
       if (!documentText.trim()) {
-        setSummaryState({ loading: false, content: 'O documento está vazio e não pode ser resumido.' });
+        setSummaryState({ loading: false, content: '<p>O documento está vazio e não pode ser resumido.</p>' });
         return;
       }
       
@@ -1474,12 +1496,12 @@ Solicitação do usuário: "${refinePrompt}"
 
       const prompt = `Você é um assistente especializado em analisar documentos de licitações públicas. Sua tarefa é criar um resumo executivo do "Documento Principal" a seguir. Utilize os "Documentos de Apoio (RAG)" como contexto para entender melhor o tema.
 
-      O resumo deve ser conciso, focar APENAS nas informações do "Documento Principal" e destacar os seguintes pontos:
+      O resumo deve ser conciso, focar APENAS nas informações do "Documento Principal" e destacar os seguintes pontos em uma lista (<ul><li>...</li></ul>):
       1.  O objetivo principal da contratação.
       2.  Os elementos ou requisitos mais importantes.
       3.  A conclusão ou solução recomendada.
 
-      Seja direto e claro. O resumo não deve exceder 200 palavras.
+      Seja direto e claro. Retorne a resposta em formato HTML.
 
       --- INÍCIO DO DOCUMENTO PRINCIPAL ---
       ${documentText}
@@ -1487,7 +1509,7 @@ Solicitação do usuário: "${refinePrompt}"
       
       ${ragContext}
 
-      --- RESUMO EXECUTIVO ---`;
+      --- RESUMO EXECUTIVO (EM HTML) ---`;
       
       const finalPrompt = prompt + (useWebSearch ? webSearchInstruction : '');
 
@@ -1496,10 +1518,12 @@ Solicitação do usuário: "${refinePrompt}"
         if (summary && !summary.startsWith("Erro:")) {
           setSummaryState({ loading: false, content: summary });
         } else {
-          setSummaryState({ loading: false, content: `Erro ao gerar resumo: ${summary}` });
+          setSummaryState({ loading: false, content: `<p>Erro ao gerar resumo: ${summary}</p>` });
         }
-      } catch (error: any) {
-        setSummaryState({ loading: false, content: `Falha inesperada ao gerar resumo: ${error.message}` });
+// FIX: Use unknown in catch and safely access error message.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSummaryState({ loading: false, content: `<p>Falha inesperada ao gerar resumo: ${message}</p>` });
       }
     };
 
@@ -1543,7 +1567,7 @@ Solicitação do usuário: "${refinePrompt}"
                             <span>A IA está a processar o seu pedido...</span>
                         </div>
                     ) : (
-                        <ContentRenderer text={summaryState.content} />
+                        <ContentRenderer htmlContent={summaryState.content} />
                     )}
                 </div>
             )}
@@ -1552,12 +1576,12 @@ Solicitação do usuário: "${refinePrompt}"
         <div className="space-y-8">
           {allSections.map(section => {
             const content = doc.sections[section.id];
-            if (content && String(content || '').trim()) {
+            if (content && stripHtml(content).trim()) {
               return (
                 <div key={section.id}>
                   <h2 className="text-xl font-bold text-slate-700 mb-3">{section.title}</h2>
                   <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <ContentRenderer text={content} className="text-slate-800 font-sans leading-relaxed text-base" />
+                    <div className="prose" dangerouslySetInnerHTML={{ __html: content }} />
                   </div>
                 </div>
               );
@@ -2223,7 +2247,7 @@ Solicitação do usuário: "${refinePrompt}"
                         onAnalyze={() => handleRiskAnalysis('etp', section.id, section.title)}
                         hasRiskAnalysis={section.hasRiskAnalysis}
                         isLoading={loadingSection === section.id}
-                        onEdit={() => handleOpenEditModal('etp', section.id, section.title)}
+                        onRefine={() => handleOpenRefineModal('etp', section.id, section.title)}
                         hasError={validationErrors.has(section.id)}
                         tooltip={section.tooltip}
                     />
@@ -2316,7 +2340,7 @@ Solicitação do usuário: "${refinePrompt}"
                         isLoading={loadingSection === section.id}
                         onAnalyze={() => handleRiskAnalysis('tr', section.id, section.title)}
                         hasRiskAnalysis={section.hasRiskAnalysis}
-                        onEdit={() => handleOpenEditModal('tr', section.id, section.title)}
+                        onRefine={() => handleOpenRefineModal('tr', section.id, section.title)}
                         hasError={validationErrors.has(section.id)}
                         tooltip={section.tooltip}
                     />
@@ -2386,48 +2410,37 @@ Solicitação do usuário: "${refinePrompt}"
           {renderPreviewContent()}
       </Modal>
       
-      <Modal isOpen={isEditModalOpen} onClose={closeEditModal} title={`Editar: ${editingContent?.title}`} maxWidth="max-w-3xl">
-        {editingContent && (
-          <div>
-            <textarea
-              value={editingContent.text}
-              onChange={(e) => setEditingContent({ ...editingContent, text: e.target.value })}
-              className="w-full h-64 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 transition-colors mb-4"
-              disabled={isRefining}
-            />
-            <div className="bg-slate-100 p-4 rounded-lg mb-4">
-              <label htmlFor="refine-prompt" className="block text-sm font-semibold text-slate-600 mb-2">Peça à IA para refinar o texto acima:</label>
-              <div className="flex gap-2">
-                <input
-                  id="refine-prompt"
-                  type="text"
-                  value={refinePrompt}
-                  onChange={(e) => setRefinePrompt(e.target.value)}
-                  placeholder="Ex: 'Torne o tom mais formal' ou 'Adicione um parágrafo sobre sustentabilidade'"
-                  className="flex-grow p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-purple-500"
-                  disabled={isRefining}
-                />
-                <button
-                  onClick={handleRefineText}
-                  disabled={!refinePrompt || isRefining}
-                  className="bg-purple-600 text-white font-bold py-2 px-3 md:px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 flex items-center justify-center"
-                >
-                  <Icon name="wand-magic-sparkles" className="md:mr-2" />
-                  <span className="hidden md:inline">
-                    {isRefining ? 'A refinar...' : 'Assim mas...'}
-                  </span>
-                </button>
-              </div>
+      <Modal isOpen={isRefineModalOpen} onClose={closeRefineModal} title={`Refinar: ${refiningContent?.title}`} maxWidth="max-w-xl">
+        {refiningContent && (
+            <div>
+                <div className="bg-slate-100 p-4 rounded-lg">
+                    <label htmlFor="refine-prompt" className="block text-sm font-semibold text-slate-700 mb-2">O que você gostaria de alterar ou adicionar ao texto?</label>
+                    <div className="flex gap-2">
+                        <input
+                            id="refine-prompt"
+                            type="text"
+                            value={refinePrompt}
+                            onChange={(e) => setRefinePrompt(e.target.value)}
+                            placeholder="Ex: 'Torne o tom mais formal' ou 'Adicione um parágrafo...'"
+                            className="flex-grow p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                            disabled={isRefining}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRefineText()}
+                        />
+                        <button
+                            onClick={handleRefineText}
+                            disabled={!refinePrompt || isRefining}
+                            className="bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        >
+                            {isRefining ? <Icon name="spinner" className="fa-spin" /> : <Icon name="wand-magic-sparkles" />}
+                        </button>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6">
+                    <button onClick={closeRefineModal} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition-colors">
+                        Fechar
+                    </button>
+                </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={closeEditModal} className="bg-transparent border border-slate-400 text-slate-600 font-bold py-2 px-4 rounded-lg hover:bg-slate-100 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleSaveChanges} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
-                <Icon name="save" className="mr-2" /> Salvar Alterações
-              </button>
-            </div>
-          </div>
         )}
     </Modal>
      <Modal 
@@ -2464,7 +2477,7 @@ Solicitação do usuário: "${refinePrompt}"
     </Modal>
 
       <Modal 
-        isOpen={!!analysisContent.content} 
+        isOpen={!!analysisContent.title} 
         onClose={() => {
           setAnalysisContent({ title: '', content: null });
           setIsRefiningAnalysis(false);
@@ -2486,7 +2499,7 @@ Solicitação do usuário: "${refinePrompt}"
                     type="text"
                     value={refineAnalysisPrompt}
                     onChange={(e) => setRefineAnalysisPrompt(e.target.value)}
-                    placeholder="Ex: 'Foque nos riscos financeiros' ou 'Sugira mais uma medida de mitigação para o Risco 1'"
+                    placeholder="Ex: 'Foque nos riscos financeiros' ou 'Sugira mais uma medida...'"
                     className="flex-grow p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-purple-500"
                     disabled={isAnalysisLoading}
                   />
@@ -2501,6 +2514,17 @@ Solicitação do usuário: "${refinePrompt}"
               </div>
             )}
             <div className="flex justify-end gap-3">
+               <button onClick={() => {
+                  if (analysisContent.content) {
+                    navigator.clipboard.writeText(stripHtml(analysisContent.content))
+                      .then(() => addNotification('success', 'Copiado!', 'A análise de risco foi copiada para a área de transferência.'));
+                  }
+                }}
+                className="bg-blue-100 text-blue-800 font-bold py-2 px-4 rounded-lg hover:bg-blue-200 transition-colors mr-auto"
+                disabled={isAnalysisLoading || !analysisContent.content}
+              >
+                <Icon name="copy" /> Copiar
+              </button>
               <button 
                 onClick={() => setIsRefiningAnalysis(!isRefiningAnalysis)}
                 className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition-colors"
@@ -2519,7 +2543,7 @@ Solicitação do usuário: "${refinePrompt}"
                   <span>A IA está a processar a sua análise...</span>
               </div>
             ) : (
-              <ContentRenderer text={analysisContent.content} />
+              <ContentRenderer htmlContent={analysisContent.content} />
             )}
           </div>
       </Modal>
@@ -2530,14 +2554,14 @@ Solicitação do usuário: "${refinePrompt}"
         title="Relatório de Conformidade - Lei 14.133/21"
         maxWidth="max-w-3xl"
       >
-        {isCheckingCompliance && !complianceCheckResult.startsWith("Erro") ? (
+        {isCheckingCompliance && !complianceCheckResult.startsWith("<p>Erro") ? (
           <div className="flex items-center justify-center flex-col gap-4 p-8">
               <Icon name="spinner" className="fa-spin text-4xl text-blue-600" />
               <p className="text-slate-600 font-semibold">A IA está a analisar o seu documento... Por favor, aguarde.</p>
           </div>
         ) : (
           <div className="p-4 bg-slate-50 rounded-lg max-h-[60vh] overflow-y-auto">
-              <ContentRenderer text={complianceCheckResult} />
+              <ContentRenderer htmlContent={complianceCheckResult} />
           </div>
         )}
         <div className="flex justify-end mt-4">
@@ -2705,7 +2729,7 @@ Solicitação do usuário: "${refinePrompt}"
         }
       >
         <div className="bg-slate-50 p-4 rounded-lg max-h-[60vh] overflow-y-auto">
-            {generatedContentModal && <ContentRenderer text={generatedContentModal.content} />}
+            {generatedContentModal && <ContentRenderer htmlContent={generatedContentModal.content} />}
         </div>
       </Modal>
 

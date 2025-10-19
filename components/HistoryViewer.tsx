@@ -2,6 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { SavedDocument, DocumentVersion, Section } from '../types';
 import { Icon } from './Icon';
 
+const stripHtml = (html: string | null | undefined): string => {
+    if (!html) return '';
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    return tempDiv.textContent || tempDiv.innerText || "";
+};
+
 // Simple Word-level Diff Algorithm (Longest Common Subsequence based)
 const diffWords = (text1: string, text2: string): { html1: string, html2: string } => {
     const words1 = text1.split(/(\s+)/);
@@ -72,8 +79,8 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({ document, allSecti
         if (!versionA || !versionB) return {};
 
         return allSectionIds.reduce((acc, sectionId) => {
-            const textA = versionA.sections[sectionId] || '';
-            const textB = versionB.sections[sectionId] || '';
+            const textA = stripHtml(versionA.sections[sectionId]);
+            const textB = stripHtml(versionB.sections[sectionId]);
             if (textA === textB) {
                 acc[sectionId] = { same: true, content: textA };
             } else {
