@@ -1989,7 +1989,7 @@ Solicitação do usuário: "${refinePrompt}"
                       {displayedETPs.length > 0 ? (
                         <ul className="space-y-2">
                           {displayedETPs.map(etp => (
-                             <li key={etp.id} className="relative flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                             <li key={etp.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? 'z-10' : ''}`}>
                                 {editingDoc?.type === 'etp' && editingDoc?.id === etp.id ? (
                                     <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                         <div className="flex-grow">
@@ -2048,7 +2048,7 @@ Solicitação do usuário: "${refinePrompt}"
                                         </button>
                                         {openDocMenu?.type === 'etp' && openDocMenu?.id === etp.id && (
                                             <div 
-                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-20 py-1"
+                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <ul className="text-sm text-slate-700">
@@ -2086,7 +2086,7 @@ Solicitação do usuário: "${refinePrompt}"
                       {displayedTRs.length > 0 ? (
                         <ul className="space-y-2">
                           {displayedTRs.map(tr => (
-                             <li key={tr.id} className="relative flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                             <li key={tr.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? 'z-10' : ''}`}>
                                 {editingDoc?.type === 'tr' && editingDoc?.id === tr.id ? (
                                     <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                         <div className="flex-grow">
@@ -2145,7 +2145,7 @@ Solicitação do usuário: "${refinePrompt}"
                                         </button>
                                         {openDocMenu?.type === 'tr' && openDocMenu?.id === tr.id && (
                                             <div 
-                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-20 py-1"
+                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <ul className="text-sm text-slate-700">
