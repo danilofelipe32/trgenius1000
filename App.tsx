@@ -1025,7 +1025,7 @@ ${content}
   const handleLoadDocument = (docType: DocumentType, id: number) => {
     const docs = docType === 'etp' ? savedETPs : savedTRs;
     const docToLoad = docs.find(doc => doc.id === id);
-    if(docToLoad) {
+    if (docToLoad) {
       if (docType === 'etp') {
         setEtpSectionsContent(docToLoad.sections);
         setEtpAttachments(docToLoad.attachments || []);
@@ -1198,6 +1198,7 @@ ${content}
             .map(section => `## ${section.title}\n${etp.sections[section.id] || 'Não preenchido.'}`)
             .join('\n\n');
         setLoadedEtpForTr({ id: etp.id, name: etp.name, content });
+        addNotification('success', 'Contexto Carregado', `O ETP "${etp.name}" foi carregado com sucesso para o TR.`);
     }
   };
 
