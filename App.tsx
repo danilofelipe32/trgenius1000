@@ -911,6 +911,7 @@ const App: React.FC = () => {
                     .join('\n\n---\n\n');
                 addNotification('error', 'Erro no RAG', 'Falha ao selecionar contexto. Usando um contexto geral.');
             }
+// FIX: Safely handle 'unknown' error type.
         } catch (error: unknown) {
             // FIX: Safely handle 'unknown' error type.
             const message = error instanceof Error ? error.message : String(error);
@@ -1021,6 +1022,7 @@ Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extr
           } else {
               addNotification('error', 'Erro de Geração', generatedText);
           }
+// FIX: Safely handle 'unknown' error type.
       } catch (error: unknown) {
           // FIX: Safely handle 'unknown' error type.
           const message = error instanceof Error ? error.message : String(error);
@@ -1112,6 +1114,7 @@ ${content}
     try {
         const result = await callGemini(finalPrompt, useWebSearch);
         setComplianceCheckResult(result);
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
 // FIX: Safely handle 'unknown' error type by converting it to a string before use.
     } catch (error: unknown) {
         // FIX: Safely handle 'unknown' error type.
@@ -1482,6 +1485,7 @@ Seja técnico, objetivo e use a estrutura HTML fornecida para garantir uma apres
         const analysisResult = await callGemini(finalPrompt, useWebSearch);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
         setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
 // FIX: Safely handle 'unknown' error type by converting it to a string before use.
     } catch (error: unknown) {
         // FIX: Safely handle 'unknown' error type.
