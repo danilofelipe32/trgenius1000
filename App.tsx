@@ -1112,6 +1112,7 @@ ${content}
     try {
         const result = await callGemini(finalPrompt, useWebSearch);
         setComplianceCheckResult(result);
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
     } catch (error: unknown) {
         // FIX: Safely handle 'unknown' error type.
         const message = error instanceof Error ? error.message : String(error);
@@ -1481,6 +1482,7 @@ Seja técnico, objetivo e use a estrutura HTML fornecida para garantir uma apres
         const analysisResult = await callGemini(finalPrompt, useWebSearch);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
         setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
     } catch (error: unknown) {
         // FIX: Safely handle 'unknown' error type.
         const message = error instanceof Error ? error.message : String(error);
@@ -1518,6 +1520,7 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML origi
         addNotification("error", "Erro ao Refinar", refinedResult);
         setAnalysisContent(prev => ({ ...prev, content: originalAnalysisForRefinement })); // Restore original on error
       }
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
     } catch (error: unknown) {
         // FIX: Use unknown in catch and safely access error message.
         const message = error instanceof Error ? error.message : String(error);
@@ -1568,6 +1571,7 @@ Solicitação do usuário: "${refinePrompt}"
       } else {
         addNotification("error", "Erro de Refinamento", refinedHtml);
       }
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
     } catch (error: unknown) {
         // FIX: Use unknown in catch and safely access error message.
         const message = error instanceof Error ? error.message : String(error);
@@ -1680,6 +1684,7 @@ Solicitação do usuário: "${refinePrompt}"
         } else {
           setSummaryState({ loading: false, content: `<p>Erro ao gerar resumo: ${summary}</p>` });
         }
+// FIX: Safely handle 'unknown' error type by converting it to a string before use.
       } catch (error: unknown) {
         // FIX: Use unknown in catch and safely access error message.
         const message = error instanceof Error ? error.message : String(error);
