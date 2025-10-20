@@ -21,6 +21,8 @@ const stripHtml = (html: string | null | undefined): string => {
   return doc.body.textContent || "";
 };
 
+type SidebarSectionKey = 'etps' | 'trs' | 'knowledgeBase';
+
 
 // --- Notification Component ---
 interface NotificationProps {
@@ -487,6 +489,7 @@ const App: React.FC = () => {
   const [refiningContent, setRefiningContent] = useState<{ docType: DocumentType; sectionId: string; title: string; text: string } | null>(null);
   const [refinePrompt, setRefinePrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
+  const [refineModalContent, setRefineModalContent] = useState('');
 
   // Detailed Prompt Modal State
   const [isDetailedPromptModalOpen, setIsDetailedPromptModalOpen] = useState(false);
@@ -534,6 +537,11 @@ const App: React.FC = () => {
   const [refineAnalysisPrompt, setRefineAnalysisPrompt] = useState('');
   const [originalAnalysisForRefinement, setOriginalAnalysisForRefinement] = useState('');
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+
+  // New states for reordering
+  const [sidebarSectionOrder, setSidebarSectionOrder] = useState<SidebarSectionKey[]>(['etps', 'trs', 'knowledgeBase']);
+  const draggedSectionRef = useRef<SidebarSectionKey | null>(null);
+  const [dragOverSection, setDragOverSection] = useState<SidebarSectionKey | null>(null);
 
 
   const priorityFilters: {
@@ -691,6 +699,39 @@ const App: React.FC = () => {
 
       return () => clearInterval(interval);
   }, []); // Run only once
+
+  // --- Persistence Effects for Sidebar Customization ---
+  useEffect(() => {
+    // Load saved order and open states from localStorage on initial mount
+    const savedOrder = localStorage.getItem('sidebarSectionOrder');
+    if (savedOrder) {
+      try {
+        const parsedOrder = JSON.parse(savedOrder) as SidebarSectionKey[];
+        if (Array.isArray(parsedOrder) && parsedOrder.length === 3 && parsedOrder.every(item => ['etps', 'trs', 'knowledgeBase'].includes(item))) {
+          setSidebarSectionOrder(parsedOrder);
+        } else {
+          localStorage.removeItem('sidebarSectionOrder'); // Clean up invalid data
+        }
+      } catch (e) { console.error("Failed to parse sidebar order", e); }
+    }
+
+    const savedOpenState = localStorage.getItem('openSidebarSections');
+    if (savedOpenState) {
+      try {
+        setOpenSidebarSections(JSON.parse(savedOpenState));
+      } catch (e) { console.error("Failed to parse sidebar open states", e); }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save order to localStorage whenever it changes
+    localStorage.setItem('sidebarSectionOrder', JSON.stringify(sidebarSectionOrder));
+  }, [sidebarSectionOrder]);
+
+  useEffect(() => {
+    // Save open states to localStorage whenever it changes
+    localStorage.setItem('openSidebarSections', JSON.stringify(openSidebarSections));
+  }, [openSidebarSections]);
   
   // Attachment Preview Generator
   useEffect(() => {
@@ -1450,6 +1491,7 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML origi
   const handleOpenRefineModal = (docType: DocumentType, sectionId: string, title: string) => {
     const content = (docType === 'etp' ? etpSectionsContent : trSectionsContent)[sectionId] || '';
     setRefiningContent({ docType, sectionId, title, text: content });
+    setRefineModalContent(content); // Initialize the modal's editable content
     setIsRefineModalOpen(true);
   };
   
@@ -1458,6 +1500,7 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML origi
     setRefiningContent(null);
     setRefinePrompt('');
     setIsRefining(false);
+    setRefineModalContent('');
   };
   
   const handleRefineText = async () => {
@@ -1467,7 +1510,7 @@ Retorne APENAS a análise refinada completa, mantendo o mesmo formato HTML origi
     const prompt = `Você é um assistente de redação especializado em documentos públicos. O texto original está em HTML. Refine o texto a seguir com base na solicitação do usuário. Retorne APENAS o HTML refinado, sem introduções ou observações, mantendo a estrutura e formatação.
 
 --- INÍCIO DO HTML ORIGINAL ---
-${refiningContent.text}
+${refineModalContent}
 --- FIM DO HTML ORIGINAL ---
 
 Solicitação do usuário: "${refinePrompt}"
@@ -1477,9 +1520,9 @@ Solicitação do usuário: "${refinePrompt}"
     try {
       const refinedHtml = await callGemini(prompt, useWebSearch);
       if (refinedHtml && !refinedHtml.startsWith("Erro:")) {
-        handleSectionChange(refiningContent.docType, refiningContent.sectionId, refinedHtml);
-        addNotification('success', 'Sucesso', 'O texto foi refinado pela IA.');
-        closeRefineModal();
+        setRefineModalContent(refinedHtml);
+        addNotification('success', 'Texto Refinado', 'A IA atualizou o texto no editor abaixo. Verifique e aplique as alterações se estiver satisfeito.');
+        setRefinePrompt(''); // Clear prompt after use
       } else {
         addNotification("error", "Erro de Refinamento", refinedHtml);
       }
@@ -1491,6 +1534,13 @@ Solicitação do usuário: "${refinePrompt}"
       setIsRefining(false);
     }
   };
+
+  const handleApplyRefinement = () => {
+    if (!refiningContent) return;
+    handleSectionChange(refiningContent.docType, refiningContent.sectionId, refineModalContent);
+    addNotification('success', 'Sucesso', 'O texto foi atualizado na seção.');
+    closeRefineModal();
+  }
 
   const handleExportToPDF = () => {
     if (!previewContext.type || previewContext.id === null) return;
@@ -1746,7 +1796,7 @@ Solicitação do usuário: "${refinePrompt}"
     setValidationErrors(new Set());
   }, []);
 
-  const toggleSidebarSection = (section: 'etps' | 'trs' | 'knowledgeBase') => {
+  const toggleSidebarSection = (section: SidebarSectionKey) => {
     setOpenSidebarSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
   
@@ -1881,9 +1931,293 @@ Solicitação do usuário: "${refinePrompt}"
     };
   }, [searchedDocs, sortOrder]);
   
+  // Drag-and-drop handlers for sidebar sections
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, sectionId: SidebarSectionKey) => {
+    draggedSectionRef.current = sectionId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.style.opacity = '0.5';
+  };
+
+  const handleDragEnter = (sectionId: SidebarSectionKey) => {
+    if (draggedSectionRef.current && draggedSectionRef.current !== sectionId) {
+      setDragOverSection(sectionId);
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    e.currentTarget.style.opacity = '1';
+    if (draggedSectionRef.current && dragOverSection) {
+      const newOrder = [...sidebarSectionOrder];
+      const draggedItemIndex = newOrder.indexOf(draggedSectionRef.current);
+      const dragOverItemIndex = newOrder.indexOf(dragOverSection);
+
+      const [removedItem] = newOrder.splice(draggedItemIndex, 1);
+      newOrder.splice(dragOverItemIndex, 0, removedItem);
+      
+      setSidebarSectionOrder(newOrder);
+    }
+    draggedSectionRef.current = null;
+    setDragOverSection(null);
+  };
+
+
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
+
+  const sidebarSectionsConfig: Record<SidebarSectionKey, {
+    key: SidebarSectionKey;
+    title: string;
+    icon: string;
+    iconColor: string;
+    jsx: React.ReactNode;
+  }> = {
+    etps: {
+        key: 'etps',
+        title: 'ETPs Salvos',
+        icon: 'file-alt',
+        iconColor: 'text-blue-500',
+        jsx: (
+            <div className="space-y-2">
+              {displayedETPs.length > 0 ? (
+                <ul className="space-y-2">
+                  {displayedETPs.map(etp => (
+                     <li key={etp.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? 'z-20' : ''}`}>
+                        {editingDoc?.type === 'etp' && editingDoc?.id === etp.id ? (
+                            <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
+                                <div className="flex-grow">
+                                    <input
+                                        type="text"
+                                        value={editingDoc.name}
+                                        onChange={(e) => setEditingDoc({ ...editingDoc, name: e.target.value })}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleUpdateDocumentDetails();
+                                            if (e.key === 'Escape') setEditingDoc(null);
+                                        }}
+                                        className="text-sm font-medium w-full bg-white border border-blue-500 rounded px-1 py-0.5"
+                                        autoFocus
+                                    />
+                                    <select
+                                        value={editingDoc.priority}
+                                        onChange={(e) => setEditingDoc(prev => prev ? { ...prev, priority: e.target.value as Priority } : null)}
+                                        className="w-full mt-1 p-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-white"
+                                    >
+                                        <option value="high">{priorityLabels.high}</option>
+                                        <option value="medium">{priorityLabels.medium}</option>
+                                        <option value="low">{priorityLabels.low}</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={handleUpdateDocumentDetails} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
+                                    <button onClick={() => setEditingDoc(null)} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
+                                </div>
+                            </div>
+                        ) : (
+                          <div className="flex items-center justify-between w-full gap-4">
+                              <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                                  <PriorityIndicator priority={etp.priority} />
+                                  <span className="text-sm font-medium text-slate-700 truncate" title={etp.name}>{etp.name}</span>
+                              </div>
+                              <div className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0" title={etp.updatedAt ? `Atualizado em: ${new Date(etp.updatedAt).toLocaleString('pt-BR')}` : ''}>
+                                  {etp.updatedAt && (
+                                    <span>
+                                      {new Date(etp.updatedAt).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}
+                                    </span>
+                                  )}
+                              </div>
+                              <div className="relative flex-shrink-0">
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenDocMenu(openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? null : { type: 'etp', id: etp.id });
+                                    }} 
+                                    className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
+                                    title="Mais opções"
+                                >
+                                    <Icon name="ellipsis-v" />
+                                </button>
+                                {openDocMenu?.type === 'etp' && openDocMenu?.id === etp.id && (
+                                    <div 
+                                        className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <ul className="text-sm text-slate-700">
+                                            <li><button onClick={() => { handleStartEditing('etp', etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
+                                            <li><button onClick={() => { handleLoadDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
+                                            <li><button onClick={() => { setPreviewContext({ type: 'etp', id: etp.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
+                                            <li><button onClick={() => { displayDocumentHistory(etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
+                                            <li className="my-1"><hr className="border-slate-100"/></li>
+                                            <li><button onClick={() => { handleDeleteDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                          </div>
+                        )}
+                      </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-slate-400 italic px-2">Nenhum ETP corresponde ao filtro.</p>}
+            </div>
+        )
+    },
+    trs: {
+        key: 'trs',
+        title: 'TRs Salvos',
+        icon: 'gavel',
+        iconColor: 'text-purple-500',
+        jsx: (
+            <div className="space-y-2">
+              {displayedTRs.length > 0 ? (
+                <ul className="space-y-2">
+                  {displayedTRs.map(tr => (
+                     <li key={tr.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? 'z-20' : ''}`}>
+                        {editingDoc?.type === 'tr' && editingDoc?.id === tr.id ? (
+                            <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
+                                <div className="flex-grow">
+                                    <input
+                                        type="text"
+                                        value={editingDoc.name}
+                                        onChange={(e) => setEditingDoc({ ...editingDoc, name: e.target.value })}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleUpdateDocumentDetails();
+                                            if (e.key === 'Escape') setEditingDoc(null);
+                                        }}
+                                        className="text-sm font-medium w-full bg-white border border-blue-500 rounded px-1 py-0.5"
+                                        autoFocus
+                                    />
+                                    <select
+                                        value={editingDoc.priority}
+                                        onChange={(e) => setEditingDoc(prev => prev ? { ...prev, priority: e.target.value as Priority } : null)}
+                                        className="w-full mt-1 p-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-white"
+                                    >
+                                        <option value="high">{priorityLabels.high}</option>
+                                        <option value="medium">{priorityLabels.medium}</option>
+                                        <option value="low">{priorityLabels.low}</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={handleUpdateDocumentDetails} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
+                                    <button onClick={() => setEditingDoc(null)} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
+                                </div>
+                            </div>
+                        ) : (
+                          <div className="flex items-center justify-between w-full gap-4">
+                              <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                                  <PriorityIndicator priority={tr.priority} />
+                                  <span className="text-sm font-medium text-slate-700 truncate" title={tr.name}>{tr.name}</span>
+                              </div>
+                              <div className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0" title={tr.updatedAt ? `Atualizado em: ${new Date(tr.updatedAt).toLocaleString('pt-BR')}` : ''}>
+                                  {tr.updatedAt && (
+                                    <span>
+                                      {new Date(tr.updatedAt).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}
+                                    </span>
+                                  )}
+                              </div>
+                              <div className="relative flex-shrink-0">
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenDocMenu(openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? null : { type: 'tr', id: tr.id });
+                                    }} 
+                                    className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
+                                    title="Mais opções"
+                                >
+                                    <Icon name="ellipsis-v" />
+                                </button>
+                                {openDocMenu?.type === 'tr' && openDocMenu?.id === tr.id && (
+                                    <div 
+                                        className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <ul className="text-sm text-slate-700">
+                                            <li><button onClick={() => { handleStartEditing('tr', tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
+                                            <li><button onClick={() => { handleLoadDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
+                                            <li><button onClick={() => { setPreviewContext({ type: 'tr', id: tr.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
+                                            <li><button onClick={() => { displayDocumentHistory(tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
+                                            <li className="my-1"><hr className="border-slate-100"/></li>
+                                            <li><button onClick={() => { handleDeleteDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                          </div>
+                        )}
+                      </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-slate-400 italic px-2">Nenhum TR corresponde ao filtro.</p>}
+            </div>
+        )
+    },
+    knowledgeBase: {
+        key: 'knowledgeBase',
+        title: 'Base de Conhecimento',
+        icon: 'database',
+        iconColor: 'text-green-500',
+        jsx: (
+          <div className="space-y-2">
+            {processingFiles.length > 0 && (
+               <div className="mb-3 p-2 bg-slate-100 rounded-lg">
+                   <h4 className="text-xs font-bold text-slate-600 mb-2">A processar ficheiros...</h4>
+                   <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
+                       <div 
+                           className="bg-blue-600 h-1.5 rounded-full transition-all duration-500" 
+                           style={{ width: `${(processingFiles.filter(f => f.status !== 'processing').length / processingFiles.length) * 100}%` }}
+                       ></div>
+                   </div>
+                   <ul className="space-y-1">
+                       {processingFiles.map(file => (
+                           <li key={file.name} className="flex items-center text-xs justify-between">
+                               <div className="flex items-center truncate">
+                                   {file.status === 'processing' && <Icon name="spinner" className="fa-spin text-slate-400 w-4" />}
+                                   {file.status === 'success' && <Icon name="check-circle" className="text-green-500 w-4" />}
+                                   {file.status === 'error' && <Icon name="exclamation-circle" className="text-red-500 w-4" />}
+                                   <span className="ml-2 truncate flex-1">{file.name}</span>
+                               </div>
+                               {file.status === 'error' && <span className="ml-2 text-red-600 font-semibold flex-shrink-0">{file.message}</span>}
+                           </li>
+                       ))}
+                   </ul>
+               </div>
+            )}
+
+           {uploadedFiles.length === 0 && processingFiles.length === 0 && (
+               <p className="text-sm text-slate-400 italic px-2">Nenhum ficheiro carregado.</p>
+           )}
+           
+           {uploadedFiles.map((file, index) => (
+               <div key={index} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
+                   <label className={`flex items-center gap-2 text-sm font-medium text-slate-700 truncate ${file.isLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                       <input
+                           type="checkbox"
+                           checked={file.selected}
+                           onChange={() => handleToggleFileSelection(index)}
+                           className="form-checkbox h-4 w-4 text-blue-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                           disabled={!!file.isLocked}
+                       />
+                       <span className="truncate">{file.name}</span>
+                   </label>
+                   <div className="flex items-center gap-1 flex-shrink-0">
+                       <button onClick={() => handleToggleFileLock(index)} className="w-6 h-6 text-slate-500 hover:text-yellow-600" title={file.isLocked ? "Desbloquear Ficheiro" : "Bloquear Ficheiro"}>
+                           <Icon name={file.isLocked ? "lock" : "lock-open"} />
+                       </button>
+                       <button onClick={() => handlePreviewRagFile(file)} className="w-6 h-6 text-slate-500 hover:text-green-600" title="Pré-visualizar"><Icon name="eye" /></button>
+                       <button onClick={() => handleDeleteFile(index)} className="w-6 h-6 text-slate-500 hover:text-red-600" title="Apagar"><Icon name="trash" /></button>
+                   </div>
+               </div>
+           ))}
+           
+           <label className="mt-2 w-full flex items-center justify-center px-4 py-3 bg-blue-50 border-2 border-dashed border-blue-200 text-blue-600 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
+               <Icon name="upload" className="mr-2" />
+               <span className="text-sm font-semibold">Carregar ficheiros</span>
+               <input type="file" className="hidden" multiple onChange={handleFileUpload} accept=".pdf,.docx,.txt,.json,.md" />
+           </label>
+        </div>
+        )
+    }
+  };
+
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-800 font-sans">
@@ -1974,271 +2308,49 @@ Solicitação do usuário: "${refinePrompt}"
                         </button>
                     </div>
                 </div>
-
-                {/* Accordion Section: ETPs */}
-                <div className="py-1">
-                  <button onClick={() => toggleSidebarSection('etps')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-blue-50 transition-colors">
-                    <div className="flex items-center">
-                        <Icon name="file-alt" className="text-blue-500 w-5 text-center" />
-                        <h3 className="text-sm font-semibold text-blue-600 uppercase tracking-wider ml-2">ETPs Salvos</h3>
-                    </div>
-                    <Icon name={openSidebarSections.etps ? 'chevron-up' : 'chevron-down'} className="text-slate-400 transition-transform" />
-                  </button>
-                  <div className={`transition-all duration-500 ease-in-out overflow-hidden ${openSidebarSections.etps ? 'max-h-[1000px] opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-                    <div className="space-y-2">
-                      {displayedETPs.length > 0 ? (
-                        <ul className="space-y-2">
-                          {displayedETPs.map(etp => (
-                             <li key={etp.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? 'z-20' : ''}`}>
-                                {editingDoc?.type === 'etp' && editingDoc?.id === etp.id ? (
-                                    <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
-                                        <div className="flex-grow">
-                                            <input
-                                                type="text"
-                                                value={editingDoc.name}
-                                                onChange={(e) => setEditingDoc({ ...editingDoc, name: e.target.value })}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handleUpdateDocumentDetails();
-                                                    if (e.key === 'Escape') setEditingDoc(null);
-                                                }}
-                                                className="text-sm font-medium w-full bg-white border border-blue-500 rounded px-1 py-0.5"
-                                                autoFocus
-                                            />
-                                            <select
-                                                value={editingDoc.priority}
-                                                onChange={(e) => setEditingDoc(prev => prev ? { ...prev, priority: e.target.value as Priority } : null)}
-                                                className="w-full mt-1 p-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-white"
-                                            >
-                                                <option value="high">{priorityLabels.high}</option>
-                                                <option value="medium">{priorityLabels.medium}</option>
-                                                <option value="low">{priorityLabels.low}</option>
-                                            </select>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={handleUpdateDocumentDetails} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
-                                            <button onClick={() => setEditingDoc(null)} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                  <div className="flex items-center justify-between w-full gap-4">
-                                      {/* Name and Priority */}
-                                      <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-                                          <PriorityIndicator priority={etp.priority} />
-                                          <span className="text-sm font-medium text-slate-700 truncate" title={etp.name}>{etp.name}</span>
-                                      </div>
-                                      {/* Date */}
-                                      <div className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0" title={etp.updatedAt ? `Atualizado em: ${new Date(etp.updatedAt).toLocaleString('pt-BR')}` : ''}>
-                                          {etp.updatedAt && (
-                                            <span>
-                                              {new Date(etp.updatedAt).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}
-                                            </span>
-                                          )}
-                                      </div>
-                                      {/* Actions */}
-                                      <div className="flex-shrink-0">
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenDocMenu(openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? null : { type: 'etp', id: etp.id });
-                                            }} 
-                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
-                                            title="Mais opções"
-                                        >
-                                            <Icon name="ellipsis-v" />
-                                        </button>
-                                        {openDocMenu?.type === 'etp' && openDocMenu?.id === etp.id && (
-                                            <div 
-                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <ul className="text-sm text-slate-700">
-                                                    <li><button onClick={() => { handleStartEditing('etp', etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
-                                                    <li><button onClick={() => { handleLoadDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
-                                                    <li><button onClick={() => { setPreviewContext({ type: 'etp', id: etp.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
-                                                    <li><button onClick={() => { displayDocumentHistory(etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
-                                                    <li className="my-1"><hr className="border-slate-100"/></li>
-                                                    <li><button onClick={() => { handleDeleteDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
-                                                </ul>
-                                            </div>
-                                        )}
-                                    </div>
-                                  </div>
-                                )}
-                              </li>
-                          ))}
-                        </ul>
-                      ) : <p className="text-sm text-slate-400 italic px-2">Nenhum ETP corresponde ao filtro.</p>}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Accordion Section: TRs */}
-                <div className="py-1">
-                  <button onClick={() => toggleSidebarSection('trs')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-purple-50 transition-colors">
-                    <div className="flex items-center">
-                        <Icon name="gavel" className="text-purple-500 w-5 text-center" />
-                        <h3 className="text-sm font-semibold text-purple-600 uppercase tracking-wider ml-2">TRs Salvos</h3>
-                    </div>
-                    <Icon name={openSidebarSections.trs ? 'chevron-up' : 'chevron-down'} className="text-slate-400 transition-transform" />
-                  </button>
-                   <div className={`transition-all duration-500 ease-in-out overflow-hidden ${openSidebarSections.trs ? 'max-h-[1000px] opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-                    <div className="space-y-2">
-                      {displayedTRs.length > 0 ? (
-                        <ul className="space-y-2">
-                          {displayedTRs.map(tr => (
-                             <li key={tr.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? 'z-20' : ''}`}>
-                                {editingDoc?.type === 'tr' && editingDoc?.id === tr.id ? (
-                                    <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
-                                        <div className="flex-grow">
-                                            <input
-                                                type="text"
-                                                value={editingDoc.name}
-                                                onChange={(e) => setEditingDoc({ ...editingDoc, name: e.target.value })}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handleUpdateDocumentDetails();
-                                                    if (e.key === 'Escape') setEditingDoc(null);
-                                                }}
-                                                className="text-sm font-medium w-full bg-white border border-blue-500 rounded px-1 py-0.5"
-                                                autoFocus
-                                            />
-                                            <select
-                                                value={editingDoc.priority}
-                                                onChange={(e) => setEditingDoc(prev => prev ? { ...prev, priority: e.target.value as Priority } : null)}
-                                                className="w-full mt-1 p-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-white"
-                                            >
-                                                <option value="high">{priorityLabels.high}</option>
-                                                <option value="medium">{priorityLabels.medium}</option>
-                                                <option value="low">{priorityLabels.low}</option>
-                                            </select>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={handleUpdateDocumentDetails} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
-                                            <button onClick={() => setEditingDoc(null)} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                  <div className="flex items-center justify-between w-full gap-4">
-                                      {/* Name and Priority */}
-                                      <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-                                          <PriorityIndicator priority={tr.priority} />
-                                          <span className="text-sm font-medium text-slate-700 truncate" title={tr.name}>{tr.name}</span>
-                                      </div>
-                                      {/* Date */}
-                                      <div className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0" title={tr.updatedAt ? `Atualizado em: ${new Date(tr.updatedAt).toLocaleString('pt-BR')}` : ''}>
-                                          {tr.updatedAt && (
-                                            <span>
-                                              {new Date(tr.updatedAt).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}
-                                            </span>
-                                          )}
-                                      </div>
-                                      {/* Actions */}
-                                      <div className="flex-shrink-0">
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenDocMenu(openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? null : { type: 'tr', id: tr.id });
-                                            }} 
-                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
-                                            title="Mais opções"
-                                        >
-                                            <Icon name="ellipsis-v" />
-                                        </button>
-                                        {openDocMenu?.type === 'tr' && openDocMenu?.id === tr.id && (
-                                            <div 
-                                                className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <ul className="text-sm text-slate-700">
-                                                    <li><button onClick={() => { handleStartEditing('tr', tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
-                                                    <li><button onClick={() => { handleLoadDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
-                                                    <li><button onClick={() => { setPreviewContext({ type: 'tr', id: tr.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
-                                                    <li><button onClick={() => { displayDocumentHistory(tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
-                                                    <li className="my-1"><hr className="border-slate-100"/></li>
-                                                    <li><button onClick={() => { handleDeleteDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
-                                                </ul>
-                                            </div>
-                                        )}
-                                    </div>
-                                  </div>
-                                )}
-                              </li>
-                          ))}
-                        </ul>
-                      ) : <p className="text-sm text-slate-400 italic px-2">Nenhum TR corresponde ao filtro.</p>}
-                    </div>
-                   </div>
-                </div>
                 
-                {/* Accordion Section: Base de Conhecimento */}
-                <div className="py-1 border-t mt-2 pt-3">
-                    <button onClick={() => toggleSidebarSection('knowledgeBase')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-green-50 transition-colors">
-                        <div className="flex items-center">
-                            <Icon name="database" className="text-green-500 w-5 text-center" />
-                            <h3 className="text-sm font-semibold text-green-600 uppercase tracking-wider ml-2">Base de Conhecimento</h3>
-                        </div>
-                        <Icon name={openSidebarSections.knowledgeBase ? 'chevron-up' : 'chevron-down'} className="text-slate-400 transition-transform" />
-                    </button>
-                    <div className={`transition-all duration-500 ease-in-out overflow-hidden ${openSidebarSections.knowledgeBase ? 'max-h-[1000px] opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-                        <div className="space-y-2">
-                             {processingFiles.length > 0 && (
-                                <div className="mb-3 p-2 bg-slate-100 rounded-lg">
-                                    <h4 className="text-xs font-bold text-slate-600 mb-2">A processar ficheiros...</h4>
-                                    <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
-                                        <div 
-                                            className="bg-blue-600 h-1.5 rounded-full transition-all duration-500" 
-                                            style={{ width: `${(processingFiles.filter(f => f.status !== 'processing').length / processingFiles.length) * 100}%` }}
-                                        ></div>
-                                    </div>
-                                    <ul className="space-y-1">
-                                        {processingFiles.map(file => (
-                                            <li key={file.name} className="flex items-center text-xs justify-between">
-                                                <div className="flex items-center truncate">
-                                                    {file.status === 'processing' && <Icon name="spinner" className="fa-spin text-slate-400 w-4" />}
-                                                    {file.status === 'success' && <Icon name="check-circle" className="text-green-500 w-4" />}
-                                                    {file.status === 'error' && <Icon name="exclamation-circle" className="text-red-500 w-4" />}
-                                                    <span className="ml-2 truncate flex-1">{file.name}</span>
-                                                </div>
-                                                {file.status === 'error' && <span className="ml-2 text-red-600 font-semibold flex-shrink-0">{file.message}</span>}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                             )}
+                {sidebarSectionOrder.map(sectionId => {
+                  const section = sidebarSectionsConfig[sectionId];
+                  const isDraggingOver = dragOverSection === section.key && draggedSectionRef.current !== section.key;
 
-                            {uploadedFiles.length === 0 && processingFiles.length === 0 && (
-                                <p className="text-sm text-slate-400 italic px-2">Nenhum ficheiro carregado.</p>
-                            )}
-                            
-                            {uploadedFiles.map((file, index) => (
-                                <div key={index} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg">
-                                    <label className={`flex items-center gap-2 text-sm font-medium text-slate-700 truncate ${file.isLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
-                                        <input
-                                            type="checkbox"
-                                            checked={file.selected}
-                                            onChange={() => handleToggleFileSelection(index)}
-                                            className="form-checkbox h-4 w-4 text-blue-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                            disabled={!!file.isLocked}
-                                        />
-                                        <span className="truncate">{file.name}</span>
-                                    </label>
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button onClick={() => handleToggleFileLock(index)} className="w-6 h-6 text-slate-500 hover:text-yellow-600" title={file.isLocked ? "Desbloquear Ficheiro" : "Bloquear Ficheiro"}>
-                                            <Icon name={file.isLocked ? "lock" : "lock-open"} />
-                                        </button>
-                                        <button onClick={() => handlePreviewRagFile(file)} className="w-6 h-6 text-slate-500 hover:text-green-600" title="Pré-visualizar"><Icon name="eye" /></button>
-                                        <button onClick={() => handleDeleteFile(index)} className="w-6 h-6 text-slate-500 hover:text-red-600" title="Apagar"><Icon name="trash" /></button>
-                                    </div>
-                                </div>
-                            ))}
-                            
-                            <label className="mt-2 w-full flex items-center justify-center px-4 py-3 bg-blue-50 border-2 border-dashed border-blue-200 text-blue-600 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
-                                <Icon name="upload" className="mr-2" />
-                                <span className="text-sm font-semibold">Carregar ficheiros</span>
-                                <input type="file" className="hidden" multiple onChange={handleFileUpload} accept=".pdf,.docx,.txt,.json,.md" />
-                            </label>
-                        </div>
+                  return (
+                    <div
+                      key={section.key}
+                      onDragEnter={() => handleDragEnter(section.key)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDragLeave={() => setDragOverSection(null)}
+                      className={`py-1 rounded-lg transition-all duration-200 ${isDraggingOver ? 'bg-blue-50 ring-2 ring-blue-300' : ''}`}
+                    >
+                      <div className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-100 transition-colors group">
+                          <div 
+                              className="flex items-center flex-grow cursor-pointer"
+                              onClick={() => toggleSidebarSection(section.key)}
+                          >
+                              <Icon name={section.icon} className={`${section.iconColor} w-5 text-center`} />
+                              <h3 className={`text-sm font-semibold uppercase tracking-wider ml-2 ${section.iconColor.replace('text-', 'text-').replace('-500', '-600')}`}>{section.title}</h3>
+                          </div>
+                          <div className="flex items-center">
+                              <button onClick={() => toggleSidebarSection(section.key)} className="p-1">
+                                  <Icon name={openSidebarSections[section.key] ? 'chevron-up' : 'chevron-down'} className="text-slate-400 transition-transform" />
+                              </button>
+                              <div
+                                  draggable="true"
+                                  onDragStart={(e) => handleDragStart(e, section.key)}
+                                  onDragEnd={handleDragEnd}
+                                  className="p-1 cursor-grab"
+                                  title="Reordenar secção"
+                              >
+                                  <Icon name="grip-vertical" className="text-slate-400" />
+                              </div>
+                          </div>
+                      </div>
+                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${openSidebarSections[section.key] ? 'max-h-[1000px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                        {section.jsx}
+                      </div>
                     </div>
-                </div>
+                  );
+                })}
+
             </div>
             <div className="mt-auto pt-4 border-t border-slate-200 flex items-center gap-2">
                 <button
@@ -2516,11 +2628,40 @@ Solicitação do usuário: "${refinePrompt}"
           {renderPreviewContent()}
       </Modal>
       
-      <Modal isOpen={isRefineModalOpen} onClose={closeRefineModal} title={`Refinar: ${refiningContent?.title}`} maxWidth="max-w-xl">
+      <Modal 
+        isOpen={isRefineModalOpen} 
+        onClose={closeRefineModal} 
+        title={`Refinar: ${refiningContent?.title}`} 
+        maxWidth="max-w-3xl"
+        footer={
+            <div className="flex justify-end gap-3">
+                <button onClick={closeRefineModal} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition-colors">
+                    Cancelar
+                </button>
+                <button 
+                    onClick={handleApplyRefinement}
+                    className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                    <Icon name="check" className="mr-2" />
+                    Aplicar e Fechar
+                </button>
+            </div>
+        }
+    >
         {refiningContent && (
-            <div>
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        Edite o texto manualmente ou use a IA abaixo para refinar.
+                    </label>
+                    <RichTextEditor
+                        value={refineModalContent}
+                        onChange={setRefineModalContent}
+                        placeholder="Conteúdo da seção..."
+                    />
+                </div>
                 <div className="bg-slate-100 p-4 rounded-lg">
-                    <label htmlFor="refine-prompt" className="block text-sm font-semibold text-slate-700 mb-2">O que você gostaria de alterar ou adicionar ao texto?</label>
+                    <label htmlFor="refine-prompt" className="block text-sm font-semibold text-slate-700 mb-2">O que você gostaria de alterar ou adicionar ao texto acima?</label>
                     <div className="flex gap-2">
                         <input
                             id="refine-prompt"
@@ -2540,11 +2681,6 @@ Solicitação do usuário: "${refinePrompt}"
                             {isRefining ? <Icon name="spinner" className="fa-spin" /> : <Icon name="wand-magic-sparkles" />}
                         </button>
                     </div>
-                </div>
-                <div className="flex justify-end gap-3 mt-6">
-                    <button onClick={closeRefineModal} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition-colors">
-                        Fechar
-                    </button>
                 </div>
             </div>
         )}
