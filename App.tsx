@@ -292,11 +292,11 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
             <label htmlFor={id} className={`block text-lg font-semibold ${hasError ? 'text-red-600' : 'text-slate-700'}`}>{title}</label>
             {tooltip && <Icon name="question-circle" className="text-slate-400 cursor-help" title={tooltip} />}
         </div>
-        <div className="w-full sm:w-auto flex items-stretch gap-2 flex-wrap">
+        <div className="w-full grid grid-cols-2 sm:flex sm:flex-row sm:w-auto gap-2">
            {value && stripHtml(value).trim().length > 0 && (
              <button
               onClick={handleCopy}
-              className={`flex-1 flex items-center justify-center text-center px-3 py-2 text-xs font-semibold rounded-lg transition-colors min-w-[calc(50%-0.25rem)] sm:min-w-0 ${isCopied ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              className={`w-full flex items-center justify-center text-center px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${isCopied ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
               title={isCopied ? 'Copiado para a área de transferência!' : 'Copiar Conteúdo'}
             >
               <Icon name={isCopied ? 'check' : 'copy'} className="mr-2" /> 
@@ -306,7 +306,7 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
            {value && stripHtml(value).trim().length > 0 && onRefine && (
              <button
               onClick={onRefine}
-              className="flex-1 flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors min-w-[calc(50%-0.25rem)] sm:min-w-0"
+              className="w-full flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors"
               title="Refinar conteúdo com IA"
             >
               <Icon name="pencil-alt" className="mr-2" />
@@ -316,7 +316,7 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
           {hasRiskAnalysis && onAnalyze && (
             <button
               onClick={onAnalyze}
-              className="flex-1 flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors min-w-[calc(50%-0.25rem)] sm:min-w-0"
+              className="w-full flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors"
               title="Análise de Riscos"
             >
               <Icon name="shield-alt" className="mr-2" />
@@ -327,7 +327,7 @@ const Section: React.FC<SectionProps> = ({ id, title, placeholder, value, onChan
             <button
               onClick={onGenerate}
               disabled={isLoading}
-              className="flex-1 flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[calc(50%-0.25rem)] sm:min-w-0"
+              className="w-full flex items-center justify-center text-center px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Icon name="wand-magic-sparkles" className="mr-2" />
               <span>{isLoading ? 'A gerar...' : 'Gerar com IA'}</span>
@@ -365,8 +365,8 @@ interface ModalProps {
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, maxWidth = 'max-w-xl' }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className={`bg-white rounded-2xl shadow-2xl w-full ${maxWidth} flex flex-col max-h-[90vh] transition-all duration-300 transform scale-95 animate-scale-in`}>
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm">
+      <div className={`bg-white rounded-2xl shadow-2xl w-full ${maxWidth} flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[90vh] transition-all duration-300 transform scale-95 animate-scale-in`}>
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-800">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -480,7 +480,8 @@ const App: React.FC = () => {
   const [installPrompt, setInstallPrompt] = useState<any>(null); // For PWA install prompt
   const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [openDocMenu, setOpenDocMenu] = useState<{ type: DocumentType; id: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: DocumentType; doc: SavedDocument; } | null>(null);
+
   
   // Refine Modal State
   const [isRefineModalOpen, setIsRefineModalOpen] = useState(false);
@@ -541,6 +542,9 @@ const App: React.FC = () => {
   const draggedSectionRef = useRef<SidebarSectionKey | null>(null);
   const [dragOverSection, setDragOverSection] = useState<SidebarSectionKey | null>(null);
 
+  // Long press state
+  const longPressTimerRef = useRef<number | null>(null);
+
 
   const priorityFilters: {
     key: 'all' | Priority;
@@ -570,6 +574,52 @@ const App: React.FC = () => {
       setNotifications(prev => [...prev, newNotification]);
   }, []);
 
+  const handleContextMenu = (e: React.MouseEvent | React.TouchEvent, type: DocumentType, doc: SavedDocument) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let x, y;
+    if ('touches' in e) { // Touch event
+        x = e.touches[0].pageX;
+        y = e.touches[0].pageY;
+    } else { // Mouse event
+        x = e.pageX;
+        y = e.pageY;
+    }
+    
+    // Adjust position to prevent menu from going off-screen
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    const menuW = 208; // w-52
+    const menuH = 180; // Approximate height
+    
+    if (x + menuW > screenW) {
+        x = screenW - menuW - 10;
+    }
+    if (y + menuH > screenH) {
+        y = screenH - menuH - 10;
+    }
+    
+    setContextMenu({ x, y, type, doc });
+  };
+  
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleTouchStart = (e: React.TouchEvent, type: DocumentType, doc: SavedDocument) => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+        if ('vibrate' in navigator) navigator.vibrate(50); // Haptic feedback
+        handleContextMenu(e, type, doc);
+    }, 500); // 500ms for long press
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+
+
   // --- Effects ---
   useEffect(() => {
     const loggedIn = sessionStorage.getItem('isAuthenticated') === 'true';
@@ -578,20 +628,12 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Effect to close dropdown menu on outside click
   useEffect(() => {
-    const handleOutsideClick = () => {
-      setOpenDocMenu(null);
-    };
-
-    if (openDocMenu) {
-      document.addEventListener('click', handleOutsideClick);
-    }
-
+    document.addEventListener('click', handleCloseContextMenu);
     return () => {
-      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('click', handleCloseContextMenu);
     };
-  }, [openDocMenu]);
+  }, [handleCloseContextMenu]);
 
 
   useEffect(() => {
@@ -1958,6 +2000,11 @@ Solicitação do usuário: "${refinePrompt}"
     setDragOverSection(null);
   };
 
+  const handleMenuAction = (action: () => void) => {
+    action();
+    handleCloseContextMenu();
+  };
+
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
@@ -1980,7 +2027,14 @@ Solicitação do usuário: "${refinePrompt}"
               {displayedETPs.length > 0 ? (
                 <ul className="space-y-2">
                   {displayedETPs.map(etp => (
-                     <li key={etp.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? 'z-20' : ''}`}>
+                     <li 
+                      key={etp.id} 
+                      onContextMenu={(e) => handleContextMenu(e, 'etp', etp)}
+                      onTouchStart={(e) => handleTouchStart(e, 'etp', etp)}
+                      onTouchEnd={handleTouchEnd}
+                      onTouchMove={handleTouchEnd}
+                      className="relative flex items-center justify-between bg-slate-50 p-2 rounded-lg cursor-pointer hover:bg-slate-200 active:bg-slate-300 transition-colors"
+                     >
                         {editingDoc?.type === 'etp' && editingDoc?.id === etp.id ? (
                             <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                 <div className="flex-grow">
@@ -1994,11 +2048,13 @@ Solicitação do usuário: "${refinePrompt}"
                                         }}
                                         className="text-sm font-medium w-full bg-white border border-blue-500 rounded px-1 py-0.5"
                                         autoFocus
+                                        onClick={(e) => e.stopPropagation()}
                                     />
                                     <select
                                         value={editingDoc.priority}
                                         onChange={(e) => setEditingDoc(prev => prev ? { ...prev, priority: e.target.value as Priority } : null)}
                                         className="w-full mt-1 p-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-white"
+                                        onClick={(e) => e.stopPropagation()}
                                     >
                                         <option value="high">{priorityLabels.high}</option>
                                         <option value="medium">{priorityLabels.medium}</option>
@@ -2006,50 +2062,23 @@ Solicitação do usuário: "${refinePrompt}"
                                     </select>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <button onClick={handleUpdateDocumentDetails} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
-                                    <button onClick={() => setEditingDoc(null)} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleUpdateDocumentDetails(); }} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingDoc(null); }} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
                                 </div>
                             </div>
                         ) : (
                           <div className="flex items-center justify-between w-full gap-4">
-                              <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                              <div className="flex items-center gap-2 truncate flex-1 min-w-0" onClick={() => handleLoadDocument('etp', etp.id)}>
                                   <PriorityIndicator priority={etp.priority} />
                                   <span className="text-sm font-medium text-slate-700 truncate" title={etp.name}>{etp.name}</span>
                               </div>
                               <div className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0" title={etp.updatedAt ? `Atualizado em: ${new Date(etp.updatedAt).toLocaleString('pt-BR')}` : ''}>
                                   {etp.updatedAt && (
-                                    <span>
+                                    <span onClick={() => handleLoadDocument('etp', etp.id)}>
                                       {new Date(etp.updatedAt).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}
                                     </span>
                                   )}
                               </div>
-                              <div className="relative flex-shrink-0">
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenDocMenu(openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? null : { type: 'etp', id: etp.id });
-                                    }} 
-                                    className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
-                                    title="Mais opções"
-                                >
-                                    <Icon name="ellipsis-v" />
-                                </button>
-                                {openDocMenu?.type === 'etp' && openDocMenu?.id === etp.id && (
-                                    <div 
-                                        className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <ul className="text-sm text-slate-700">
-                                            <li><button onClick={() => { handleStartEditing('etp', etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
-                                            <li><button onClick={() => { handleLoadDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
-                                            <li><button onClick={() => { setPreviewContext({ type: 'etp', id: etp.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
-                                            <li><button onClick={() => { displayDocumentHistory(etp); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
-                                            <li className="my-1"><hr className="border-slate-100"/></li>
-                                            <li><button onClick={() => { handleDeleteDocument('etp', etp.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
                           </div>
                         )}
                       </li>
@@ -2069,7 +2098,14 @@ Solicitação do usuário: "${refinePrompt}"
               {displayedTRs.length > 0 ? (
                 <ul className="space-y-2">
                   {displayedTRs.map(tr => (
-                     <li key={tr.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? 'z-20' : ''}`}>
+                     <li 
+                        key={tr.id} 
+                        onContextMenu={(e) => handleContextMenu(e, 'tr', tr)}
+                        onTouchStart={(e) => handleTouchStart(e, 'tr', tr)}
+                        onTouchEnd={handleTouchEnd}
+                        onTouchMove={handleTouchEnd}
+                        className="relative flex items-center justify-between bg-slate-50 p-2 rounded-lg cursor-pointer hover:bg-slate-200 active:bg-slate-300 transition-colors"
+                      >
                         {editingDoc?.type === 'tr' && editingDoc?.id === tr.id ? (
                             <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                 <div className="flex-grow">
@@ -2083,11 +2119,13 @@ Solicitação do usuário: "${refinePrompt}"
                                         }}
                                         className="text-sm font-medium w-full bg-white border border-blue-500 rounded px-1 py-0.5"
                                         autoFocus
+                                        onClick={(e) => e.stopPropagation()}
                                     />
                                     <select
                                         value={editingDoc.priority}
                                         onChange={(e) => setEditingDoc(prev => prev ? { ...prev, priority: e.target.value as Priority } : null)}
                                         className="w-full mt-1 p-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-white"
+                                        onClick={(e) => e.stopPropagation()}
                                     >
                                         <option value="high">{priorityLabels.high}</option>
                                         <option value="medium">{priorityLabels.medium}</option>
@@ -2095,50 +2133,23 @@ Solicitação do usuário: "${refinePrompt}"
                                     </select>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <button onClick={handleUpdateDocumentDetails} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
-                                    <button onClick={() => setEditingDoc(null)} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleUpdateDocumentDetails(); }} className="w-6 h-6 text-green-600 hover:text-green-800" title="Salvar"><Icon name="check" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingDoc(null); }} className="w-6 h-6 text-red-600 hover:text-red-800" title="Cancelar"><Icon name="times" /></button>
                                 </div>
                             </div>
                         ) : (
                           <div className="flex items-center justify-between w-full gap-4">
-                              <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                              <div className="flex items-center gap-2 truncate flex-1 min-w-0" onClick={() => handleLoadDocument('tr', tr.id)}>
                                   <PriorityIndicator priority={tr.priority} />
                                   <span className="text-sm font-medium text-slate-700 truncate" title={tr.name}>{tr.name}</span>
                               </div>
                               <div className="text-xs text-slate-500 whitespace-nowrap flex-shrink-0" title={tr.updatedAt ? `Atualizado em: ${new Date(tr.updatedAt).toLocaleString('pt-BR')}` : ''}>
                                   {tr.updatedAt && (
-                                    <span>
+                                    <span onClick={() => handleLoadDocument('tr', tr.id)}>
                                       {new Date(tr.updatedAt).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}
                                     </span>
                                   )}
                               </div>
-                              <div className="relative flex-shrink-0">
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenDocMenu(openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? null : { type: 'tr', id: tr.id });
-                                    }} 
-                                    className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-600 rounded-full hover:bg-slate-200"
-                                    title="Mais opções"
-                                >
-                                    <Icon name="ellipsis-v" />
-                                </button>
-                                {openDocMenu?.type === 'tr' && openDocMenu?.id === tr.id && (
-                                    <div 
-                                        className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-30 py-1"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <ul className="text-sm text-slate-700">
-                                            <li><button onClick={() => { handleStartEditing('tr', tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
-                                            <li><button onClick={() => { handleLoadDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar</button></li>
-                                            <li><button onClick={() => { setPreviewContext({ type: 'tr', id: tr.id }); setIsPreviewModalOpen(true); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="eye" className="w-4 text-center text-slate-500" /> Pré-visualizar</button></li>
-                                            <li><button onClick={() => { displayDocumentHistory(tr); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
-                                            <li className="my-1"><hr className="border-slate-100"/></li>
-                                            <li><button onClick={() => { handleDeleteDocument('tr', tr.id); setOpenDocMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar</button></li>
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
                           </div>
                         )}
                       </li>
@@ -2219,6 +2230,21 @@ Solicitação do usuário: "${refinePrompt}"
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-800 font-sans">
+        {contextMenu && (
+            <div
+                style={{ top: contextMenu.y, left: contextMenu.x }}
+                className="fixed bg-white rounded-md shadow-lg border border-slate-200 z-50 py-1 w-52 animate-scale-in"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <ul className="text-sm text-slate-700">
+                    <li><button onClick={() => handleMenuAction(() => handleLoadDocument(contextMenu.type, contextMenu.doc.id))} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="upload" className="w-4 text-center text-slate-500" /> Carregar Documento</button></li>
+                    <li><button onClick={() => handleMenuAction(() => handleStartEditing(contextMenu.type, contextMenu.doc))} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="pencil-alt" className="w-4 text-center text-slate-500" /> Renomear</button></li>
+                    <li><button onClick={() => handleMenuAction(() => displayDocumentHistory(contextMenu.doc))} className="w-full text-left px-4 py-2 hover:bg-slate-100 flex items-center gap-3"><Icon name="history" className="w-4 text-center text-slate-500" /> Ver Histórico</button></li>
+                    <li className="my-1"><hr className="border-slate-100"/></li>
+                    <li><button onClick={() => handleMenuAction(() => handleDeleteDocument(contextMenu.type, contextMenu.doc.id))} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-red-600 flex items-center gap-3"><Icon name="trash" className="w-4 text-center" /> Apagar Documento</button></li>
+                </ul>
+            </div>
+        )}
        <div className="flex flex-col md:flex-row h-screen">
           {/* Mobile Overlay */}
           {isSidebarOpen && (
