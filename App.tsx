@@ -556,7 +556,7 @@ const App: React.FC = () => {
     { key: 'all', label: 'Todos', activeClasses: 'bg-white shadow-sm text-slate-800', inactiveClasses: 'text-slate-500 hover:bg-slate-200' },
     { key: 'high', label: 'Alta', activeClasses: 'bg-red-500 text-white shadow-sm', inactiveClasses: 'text-red-700 hover:bg-red-100' },
     { key: 'medium', label: 'Média', activeClasses: 'bg-yellow-500 text-white shadow-sm', inactiveClasses: 'text-yellow-700 hover:bg-yellow-100' },
-    { key: 'low', label: 'Alta', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
+    { key: 'low', label: 'Baixa', activeClasses: 'bg-green-500 text-white shadow-sm', inactiveClasses: 'text-green-700 hover:bg-green-100' },
   ];
 
 
@@ -1921,7 +1921,7 @@ Solicitação do usuário: "${refinePrompt}"
     if (navigator.share) {
         try {
             await navigator.share(shareData);
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Erro ao partilhar:', error);
         }
     } else {
@@ -1929,7 +1929,7 @@ Solicitação do usuário: "${refinePrompt}"
         try {
             await navigator.clipboard.writeText(shareData.url);
             addNotification("success", "Link Copiado", "O link da aplicação foi copiado para a sua área de transferência!");
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Erro ao copiar o link:', error);
             addNotification("error", "Erro", "Não foi possível copiar o link.");
         }
