@@ -1989,7 +1989,7 @@ Solicitação do usuário: "${refinePrompt}"
                       {displayedETPs.length > 0 ? (
                         <ul className="space-y-2">
                           {displayedETPs.map(etp => (
-                             <li key={etp.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? 'z-10' : ''}`}>
+                             <li key={etp.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'etp' && openDocMenu.id === etp.id ? 'z-20' : ''}`}>
                                 {editingDoc?.type === 'etp' && editingDoc?.id === etp.id ? (
                                     <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                         <div className="flex-grow">
@@ -2086,7 +2086,7 @@ Solicitação do usuário: "${refinePrompt}"
                       {displayedTRs.length > 0 ? (
                         <ul className="space-y-2">
                           {displayedTRs.map(tr => (
-                             <li key={tr.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? 'z-10' : ''}`}>
+                             <li key={tr.id} className={`relative flex items-center justify-between bg-slate-50 p-2 rounded-lg ${openDocMenu?.type === 'tr' && openDocMenu.id === tr.id ? 'z-20' : ''}`}>
                                 {editingDoc?.type === 'tr' && editingDoc?.id === tr.id ? (
                                     <div className="w-full flex items-center gap-2" onBlur={handleEditorBlur}>
                                         <div className="flex-grow">
