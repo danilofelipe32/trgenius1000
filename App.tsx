@@ -465,6 +465,7 @@ const App: React.FC = () => {
 
 
   // UI State
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [openSidebarSections, setOpenSidebarSections] = useState({ etps: true, trs: true, knowledgeBase: true });
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -662,6 +663,7 @@ const App: React.FC = () => {
     loadInitialData();
 
     const handleResize = () => {
+        setIsMobile(window.innerWidth < 768);
         if (window.innerWidth >= 768) {
             setIsSidebarOpen(true);
         } else {
@@ -909,8 +911,8 @@ const App: React.FC = () => {
                     .join('\n\n---\n\n');
                 addNotification('error', 'Erro no RAG', 'Falha ao selecionar contexto. Usando um contexto geral.');
             }
-        // FIX: Use unknown in catch and safely access error message.
         } catch (error: unknown) {
+            // FIX: Safely handle 'unknown' error type.
             const message = error instanceof Error ? error.message : String(error);
             relevantContent = allChunks.slice(0, 3)
                 .map(chunk => `Contexto do ficheiro "${chunk.source}":\n${chunk.content}`)
@@ -1020,7 +1022,7 @@ Gere um texto detalhado e bem fundamentado para a seção "${title}" do TR, extr
               addNotification('error', 'Erro de Geração', generatedText);
           }
       } catch (error: unknown) {
-          // FIX: Use unknown in catch and safely access error message.
+          // FIX: Safely handle 'unknown' error type.
           const message = error instanceof Error ? error.message : String(error);
           addNotification('error', 'Erro Inesperado', `Falha ao gerar texto: ${message}`);
       } finally {
@@ -1111,7 +1113,7 @@ ${content}
         const result = await callGemini(finalPrompt, useWebSearch);
         setComplianceCheckResult(result);
     } catch (error: unknown) {
-        // FIX: Use unknown in catch and safely access error message.
+        // FIX: Safely handle 'unknown' error type.
         const message = error instanceof Error ? error.message : String(error);
         setComplianceCheckResult(`<p>Erro ao verificar a conformidade: ${message}</p>`);
     } finally {
@@ -1480,7 +1482,7 @@ Seja técnico, objetivo e use a estrutura HTML fornecida para garantir uma apres
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: analysisResult });
         setOriginalAnalysisForRefinement(analysisResult); // Store original for refinement
     } catch (error: unknown) {
-        // FIX: Use unknown in catch and safely access error message.
+        // FIX: Safely handle 'unknown' error type.
         const message = error instanceof Error ? error.message : String(error);
         setAnalysisContent({ title: `Análise de Riscos: ${title}`, content: `<p>Erro ao realizar análise: ${message}</p>` });
     } finally {
@@ -1904,7 +1906,7 @@ Solicitação do usuário: "${refinePrompt}"
     const shareData = {
         title: 'TR Genius PWA',
         text: 'Conheça o TR Genius, seu assistente IA para licitações!',
-        url: 'https://trgenius.netlify.app/'
+        url: window.location.href
     };
 
     if (navigator.share) {
@@ -1920,7 +1922,7 @@ Solicitação do usuário: "${refinePrompt}"
             addNotification("success", "Link Copiado", "O link da aplicação foi copiado para a sua área de transferência!");
         } catch (error) {
             console.error('Erro ao copiar o link:', error);
-            addNotification("error", "Erro", "Não foi possível copiar o link. Por favor, copie manualmente: https://trgenius.netlify.app/");
+            addNotification("error", "Erro", "Não foi possível copiar o link.");
         }
     }
   };
@@ -2004,6 +2006,26 @@ Solicitação do usuário: "${refinePrompt}"
     action();
     handleCloseContextMenu();
   };
+
+  const BottomNav: React.FC<{
+    activeView: DocumentType;
+    switchView: (view: DocumentType) => void;
+    onNewClick: () => void;
+  }> = ({ activeView, switchView, onNewClick }) => (
+    <div className="fixed bottom-0 left-0 right-0 h-[calc(60px+env(safe-area-inset-bottom))] bg-white/80 backdrop-blur-sm border-t border-slate-200 flex items-center justify-around z-40 md:hidden">
+        <button onClick={() => switchView('etp')} className={`flex flex-col items-center justify-center gap-1 transition-colors w-24 h-full ${activeView === 'etp' ? 'text-blue-600' : 'text-slate-500'}`}>
+            <Icon name="file-alt" className="text-2xl" />
+            <span className="text-xs font-medium">ETP</span>
+        </button>
+        <button onClick={onNewClick} className="w-16 h-16 bg-pink-600 text-white rounded-full shadow-lg -translate-y-1/2 flex items-center justify-center text-3xl hover:bg-pink-700 transition-transform transform hover:scale-110 active:scale-95">
+            <Icon name="plus" />
+        </button>
+        <button onClick={() => switchView('tr')} className={`flex flex-col items-center justify-center gap-1 transition-colors w-24 h-full ${activeView === 'tr' ? 'text-blue-600' : 'text-slate-500'}`}>
+            <Icon name="gavel" className="text-2xl" />
+            <span className="text-xs font-medium">TR</span>
+        </button>
+    </div>
+  );
 
 
   if (!isAuthenticated) {
@@ -2247,7 +2269,7 @@ Solicitação do usuário: "${refinePrompt}"
         )}
        <div className="flex flex-col md:flex-row h-screen">
           {/* Mobile Overlay */}
-          {isSidebarOpen && (
+          {isSidebarOpen && isMobile && (
             <div 
               className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-10 transition-opacity"
               onClick={() => setIsSidebarOpen(false)}
@@ -2395,10 +2417,10 @@ Solicitação do usuário: "${refinePrompt}"
             </div>
           </aside>
           
-          <main className="flex-1 p-4 pb-28 sm:p-6 md:p-10 overflow-y-auto bg-slate-100" onClick={() => { if(window.innerWidth < 768) setIsSidebarOpen(false) }}>
+          <main className={`flex-1 p-4 sm:p-6 md:p-10 overflow-y-auto bg-slate-100 ${isMobile ? 'main-content-mobile-padding' : ''}`} onClick={() => { if(isMobile) setIsSidebarOpen(false) }}>
              <header className="flex flex-wrap justify-between items-center gap-4 mb-8">
                 <div className="flex-grow">
-                  <div className="border-b border-slate-200">
+                  <div className={`border-b border-slate-200 ${isMobile ? 'hidden' : 'block'}`}>
                     <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                       <button
                         onClick={() => switchView('etp')}
@@ -2422,6 +2444,11 @@ Solicitação do usuário: "${refinePrompt}"
                       </button>
                     </nav>
                   </div>
+                  {isMobile && (
+                    <h2 className="text-2xl font-bold text-slate-800">
+                        {activeView === 'etp' ? 'Gerador de ETP' : 'Gerador de TR'}
+                    </h2>
+                  )}
                 </div>
                 <div className="flex-shrink-0 ml-4 flex items-center gap-4">
                     <label htmlFor="web-search-toggle" className="flex items-center cursor-pointer gap-2 text-sm font-medium text-slate-600" title="Ativar para incluir resultados da web em tempo real nas respostas da IA.">
@@ -2999,27 +3026,29 @@ Solicitação do usuário: "${refinePrompt}"
         </div>
       </Modal>
 
-    {installPrompt && !isInstallBannerVisible && (
+    {isMobile && (
+      <BottomNav
+        activeView={activeView}
+        switchView={switchView}
+        onNewClick={() => setIsNewDocModalOpen(true)}
+      />
+    )}
+    
+    {!isMobile && (
         <button
-            onClick={handleInstallClick}
-            className="fixed bottom-44 right-8 bg-green-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-green-700 transition-transform transform hover:scale-110 z-50"
-            title="Instalar App"
-          >
-            <Icon name="download" />
+          onClick={() => setIsNewDocModalOpen(true)}
+          className="fixed bottom-10 right-10 bg-pink-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-3xl hover:bg-pink-700 transition-transform transform hover:scale-110 z-40"
+          title="Criar Novo Documento"
+        >
+          <Icon name="plus" />
         </button>
     )}
-    <button
-      onClick={() => setIsNewDocModalOpen(true)}
-      className="fixed bottom-28 right-8 bg-pink-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-pink-700 transition-transform transform hover:scale-110 z-50"
-      title="Criar Novo Documento"
-    >
-      <Icon name="plus" />
-    </button>
-    {installPrompt && isInstallBannerVisible && (
-        <InstallPWA
-            onInstall={handleInstallClick}
-            onDismiss={handleDismissInstallBanner}
-        />
+
+    {installPrompt && (
+      <InstallPWA
+        onInstall={handleInstallClick}
+        onDismiss={handleDismissInstallBanner}
+      />
     )}
 
     {/* Notifications Container */}

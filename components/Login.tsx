@@ -23,10 +23,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-100 font-sans">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-lg m-4">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 font-sans p-4">
+      <div className="w-full max-w-sm p-8 space-y-8 bg-white/70 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-300/40">
         <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-pink-100 rounded-full mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-pink-100 rounded-full mb-4 ring-8 ring-white/50">
                 <Icon name="brain" className="text-pink-600 text-3xl" />
             </div>
             <h1 className="text-3xl font-bold text-slate-900">TR Genius</h1>
@@ -46,7 +46,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-3 pl-10 bg-white/50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="admin@trgenius.com"
               />
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -67,7 +67,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-3 pl-10 bg-white/50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="••••••••"
               />
                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -81,7 +81,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <div>
             <button
               type="submit"
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all"
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all transform hover:scale-105"
             >
               Entrar
             </button>

@@ -42,6 +42,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json,woff2}'],
         runtimeCaching: [
           {
+            urlPattern: ({url}) => url.origin.startsWith('https://aistudiocdn.com'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'aistudio-cdn-cache', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 30 } }
+          },
+          {
             urlPattern: ({url}) => url.origin === 'https://cdn.tailwindcss.com',
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'tailwind-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 } }
