@@ -158,7 +158,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
     }
   };
   
-  const [updateKey, setUpdateKey] = useState(0);
+  const [, setUpdateKey] = useState(0);
   const forceUpdate = () => setUpdateKey(k => k + 1);
 
   const getCommandState = (command: string) => {
@@ -180,7 +180,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
         </div>
       )}
       <div
-        key={updateKey}
         ref={editorRef}
         contentEditable={!disabled}
         onInput={handleInput}
@@ -188,7 +187,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
         onMouseUp={forceUpdate}
         className={`rich-text-editor w-full h-40 p-3 bg-slate-50 focus:outline-none overflow-y-auto ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         data-placeholder={placeholder}
-        dangerouslySetInnerHTML={{ __html: value || ''}}
        />
        <style>{`
         .rich-text-editor:empty:not(:focus):before {
